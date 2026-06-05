@@ -919,3 +919,33 @@ body::before {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* --- Pin Button --- */
+.btn-pin {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 14px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    opacity: 0.5;
+    filter: grayscale(1);
+}
+
+.btn-pin:hover {
+    background: var(--bg-glass);
+    opacity: 0.8;
+}
+
+.btn-pin.pinned {
+    opacity: 1;
+    filter: grayscale(0);
+    border-color: var(--yellow);
+    background: rgba(245, 158, 11, 0.1);
+}

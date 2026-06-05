@@ -66,6 +66,9 @@
             <button class="tab" data-tab="tracking" onclick="switchTab('tracking')">
                 📈 標的追蹤
             </button>
+            <button class="tab" data-tab="watchlist" onclick="switchTab('watchlist')">
+                📌 我的追蹤
+            </button>
             <button class="tab" data-tab="history" onclick="switchTab('history')">
                 📋 歷史報告
             </button>
@@ -113,6 +116,21 @@
                         <canvas id="performanceChart"></canvas>
                     </div>
                     <div class="modal-detail" id="modalDetail"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Watchlist Tab -->
+        <section class="tab-content" id="tab-watchlist">
+            <div class="section-header">
+                <h2>📌 我的追蹤 (Watchlist)</h2>
+                <p class="section-desc">您已釘選的個股，資料保存在瀏覽器本機中</p>
+            </div>
+            <div id="watchlistTable" class="tracking-container">
+                <div class="empty-state">
+                    <div class="empty-icon">📌</div>
+                    <h3>尚未釘選任何標的</h3>
+                    <p>請到「標的追蹤」或「最新報告」中勾選欲追蹤的個股</p>
                 </div>
             </div>
         </section>

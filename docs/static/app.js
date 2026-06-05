@@ -4,6 +4,7 @@
 
 // --- State ---
 let currentChart = null;
+let pinnedStocks = JSON.parse(localStorage.getItem('gooaye_watchlist') || '[]');
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -34,6 +35,7 @@ async function loadDashboard() {
             loadSummary(),
             loadLatestReport(),
             loadTracking(),
+            loadWatchlist(),
             loadHistory(),
         ]);
         document.getElementById('lastUpdate').textContent =
@@ -280,8 +282,16 @@ async function loadTracking() {
                     ${recs.map(rec => `
                         <tr onclick="showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">
                             <td>
-                                <strong>${escHtml(rec.stock_name || '')}</strong>
-                                <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.stock_symbol)}</div>
+                                <div style="display:flex; align-items:center; gap:8px">
+                                    <button class="btn-pin ${pinnedStocks.includes(rec.stock_symbol) ? 'pinned' : ''}" 
+                                            onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">
+                                        📌
+                                    </button>
+                                    <div>
+                                        <strong>${escHtml(rec.stock_name || '')}</strong>
+                                        <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.stock_symbol)}</div>
+                                    </div>
+                                </div>
                             </td>
                             <td>${rec.market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股'}</td>
                             <td style="font-size:13px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(rec.video_title || '')}</td>
@@ -297,6 +307,70 @@ async function loadTracking() {
         `;
     } catch (err) {
         console.error('Tracking load error:', err);
+    }
+}
+
+// --- Watchlist ---
+function togglePinStatus(symbol) {
+    if (pinnedStocks.includes(symbol)) {
+        pinnedStocks = pinnedStocks.filter(s => s !== symbol);
+        showToast(`已取消追蹤 ${symbol}`);
+    } else {
+        pinnedStocks.push(symbol);
+        showToast(`已將 ${symbol} 加入追蹤清單`, 'success');
+    }
+    localStorage.setItem('gooaye_watchlist', JSON.stringify(pinnedStocks));
+    
+    // Refresh tables
+    loadTracking();
+    loadWatchlist();
+}
+
+async function loadWatchlist() {
+    try {
+        let recs;
+        if (window._isStatic) {
+            recs = window._staticData.recommendations;
+        } else {
+            const res = await fetch('/api/recommendations');
+            recs = await res.json();
+        }
+
+        const container = document.getElementById('watchlistTable');
+        
+        // Filter out only the most recent recommendation for each pinned stock symbol
+        const pinnedRecsMap = new Map();
+        if (recs && recs.length > 0) {
+            recs.forEach(rec => {
+                if (pinnedStocks.includes(rec.stock_symbol)) {
+                    // Because they are sorted by date descending, the first one we encounter is the latest
+                    if (!pinnedRecsMap.has(rec.stock_symbol)) {
+                        pinnedRecsMap.set(rec.stock_symbol, rec);
+                    }
+                }
+            });
+        }
+        
+        const pinnedRecs = Array.from(pinnedRecsMap.values());
+
+        if (pinnedRecs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📌</div>
+                    <h3>尚未釘選任何標的</h3>
+                    <p>請到「標的追蹤」中點擊圖示加入追蹤</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="stock-cards">
+                ${pinnedRecs.map(rec => renderStockCard(rec)).join('')}
+            </div>
+        `;
+    } catch (err) {
+        console.error('Watchlist load error:', err);
     }
 }
 
