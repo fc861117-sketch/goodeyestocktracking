@@ -324,6 +324,8 @@ async function loadTracking() {
 }
 
 // --- Watchlist ---
+let syncTimeout = null;
+
 function togglePinStatus(symbol) {
     if (pinnedStocks.includes(symbol)) {
         pinnedStocks = pinnedStocks.filter(s => s !== symbol);
@@ -338,9 +340,12 @@ function togglePinStatus(symbol) {
     loadTracking();
     loadWatchlist();
 
-    // Auto-sync to GitHub if token exists
+    // Auto-sync to GitHub if token exists (with debounce)
     if (githubApiToken) {
-        syncWatchlistToGitHub();
+        if (syncTimeout) clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(() => {
+            syncWatchlistToGitHub();
+        }, 1500);
     }
 }
 
@@ -469,6 +474,11 @@ async function syncWatchlistFromGitHub() {
                 pinnedStocks = merged;
                 localStorage.setItem('gooaye_watchlist', JSON.stringify(pinnedStocks));
                 showToast('已從雲端載入最新追蹤清單', 'success');
+            }
+            
+            // Auto-heal: If our local merged state has more items than the remote, push it back
+            if (JSON.stringify(merged) !== JSON.stringify(remoteStocks)) {
+                setTimeout(() => syncWatchlistToGitHub(), 2000); // Wait a bit to avoid immediate conflicts
             }
         } else if (res.status === 404) {
             // File doesn't exist yet, push current local state to create it
