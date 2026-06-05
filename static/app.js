@@ -523,9 +523,11 @@ async function syncWatchlistToGitHub() {
             await syncWatchlistToGitHub(); // Retry after fetching latest sha
         } else {
             console.error('Failed to sync to GitHub:', await res.text());
+            showToast('雲端同步失敗，請確認 Token 權限是否有勾選 repo', 'error');
         }
     } catch (err) {
         console.error('Failed to sync to GitHub', err);
+        showToast('雲端同步發生錯誤', 'error');
     }
 }
 
