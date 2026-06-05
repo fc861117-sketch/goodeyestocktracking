@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股癌分析儀表板 | 新環境部署簡報 (Guide)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #60a5fa;
+            --green: #10b981;
+            --yellow: #f59e0b;
+        }
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent-secondary), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .step-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .step-number {
+            display: inline-block;
+            background: var(--accent-primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            text-align: center;
+            line-height: 28px;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+        h2 {
+            display: flex;
+            align-items: center;
+            font-size: 20px;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 12px;
+        }
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: var(--accent-secondary);
+        }
+        pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: #e2e8f0;
+        }
+        .alert {
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid var(--yellow);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 股癌分析系統轉移指南</h1>
+            <p style="color: var(--text-secondary)">當您更換新電腦時，請依照此簡報步驟重新建立您的 Workspace</p>
+        </div>
+
+        <div class="step-card">
+            <h2><span class="step-number">1</span> 下載專案程式碼</h2>
+            <p>在新的電腦上，打開終端機 (Terminal) 或 PowerShell，將您的專案從 GitHub Clone 下來：</p>
+            <pre><code>git clone https://github.com/fc861117-sketch/goodeyestocktracking.git
+cd goodeyestocktracking</code></pre>
+        </div>
+
+        <div class="step-card">
+            <h2><span class="step-number">2</span> 安裝系統必備工具</h2>
+            <p>這個專案依賴強大的 AI 語音辨識模型，因此您必須在新電腦上安裝以下工具：</p>
+            <ul>
+                <li><strong>Python 3.10+</strong>: 請至 Python 官網下載並安裝 (安裝時記得勾選 <code>Add Python to PATH</code>)。</li>
+                <li><strong>FFmpeg</strong>: 這是處理影片音軌的必備工具。
+                    <ul>
+                        <li>Windows 用戶可使用指令安裝：<code>winget install ffmpeg</code></li>
+                        <li>安裝後請確保 FFmpeg 已加入系統的環境變數 (PATH) 中。</li>
+                    </ul>
+                </li>
+                <li><strong>NVIDIA 顯示卡驅動與 CUDA (選用但強烈建議)</strong>: 如果新電腦有 NVIDIA 顯示卡，請安裝最新版驅動程式以啟用 GPU 極速分析。</li>
+            </ul>
+        </div>
+
+        <div class="step-card">
+            <h2><span class="step-number">3</span> 安裝 Python 套件</h2>
+            <p>在專案資料夾內執行以下指令，安裝所有需要的程式套件：</p>
+            <pre><code>pip install -r requirements.txt</code></pre>
+            <p style="font-size:14px; color:var(--text-secondary);">*若您遇到 torchvision 找不到的問題，可以到 PyTorch 官網使用指令安裝 CUDA 版本的 torch 套件。</p>
+        </div>
+
+        <div class="step-card">
+            <h2><span class="step-number">4</span> 設定 API 金鑰 (非常重要)</h2>
+            <div class="alert">
+                <strong>⚠️ 為什麼要重新設定？</strong><br>
+                為了保護您的資安，<code>config.json</code> 密碼檔並沒有上傳到 GitHub！您必須在新的電腦上重新建立它。
+            </div>
+            <p>1. 在專案資料夾內，找到 <code>config.example.json</code>。<br>
+               2. 將它複製一份，並改名為 <strong><code>config.json</code></strong>。<br>
+               3. 打開 <code>config.json</code>，填入您的 API Keys：
+            </p>
+            <pre><code>{
+    "gemini_api_key": "在這裡貼上您的 Gemini 金鑰",
+    "github_token": "在這裡貼上您的 GitHub PAT (需有 repo 權限)",
+    "github_repo": "fc861117-sketch/goodeyestocktracking"
+}</code></pre>
+        </div>
+
+        <div class="step-card">
+            <h2><span class="step-number">5</span> 享受全自動分析！</h2>
+            <p>恭喜您！您的新環境已經架設完畢。現在您只需要執行以下指令，就能一鍵分析最新的影片並自動更新網頁：</p>
+            <pre><code>python main.py analyze --limit 3</code></pre>
+            <p>分析完成後，別忘了執行靜態網頁生成與推送到 GitHub：</p>
+            <pre><code>python main.py generate-static
+git add .
+git commit -m "Auto update via new PC"
+git push origin main</code></pre>
+            <p style="text-align:center; margin-top:24px; font-size:24px;">🎉</p>
+        </div>
+    </div>
+</body>
+</html>
