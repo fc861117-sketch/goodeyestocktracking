@@ -34,6 +34,7 @@ from modules import transcriber
 from modules import report_generator
 from modules import performance_tracker
 from modules import static_generator
+from modules import notifier
 
 
 def setup_logging():
@@ -149,10 +150,17 @@ def cmd_analyze(config, limit=None):
     for v in new_videos:
         logger.info("  → %s", v['title'])
 
+    email_body = "<h2>股癌分析報告完成</h2><br><ul>"
+    processed_count = 0
+
     for video_info in new_videos:
         report = process_video(video_info, config)
         if report:
+            processed_count += 1
             recs = report.get('recommendations', [])
+            
+            email_body += f"<li><strong>{video_info['title']}</strong>: 找到 {len(recs)} 檔推薦標的</li>"
+            
             logger.info("")
             logger.info("📊 Report Summary for: %s", video_info['title'])
             logger.info("   Stocks identified: %d", len(recs))
@@ -168,6 +176,8 @@ def cmd_analyze(config, limit=None):
                              rec.get('stock_symbol'),
                              rec.get('current_price'))
             logger.info("")
+            
+    email_body += "</ul>"
 
     # Update prices for all tracked recommendations
     logger.info("📈 Updating performance tracking...")
@@ -176,6 +186,13 @@ def cmd_analyze(config, limit=None):
     # Generate static site for GitHub pages
     logger.info("📄 Generating static site for GitHub Pages...")
     static_generator.generate_static_site()
+
+    if processed_count > 0:
+        notifier.send_email_notification(
+            config,
+            f"📈 股癌最新影片分析完成 ({processed_count}部)",
+            email_body + "<p>請前往 GitHub Pages 或執行 <code>python main.py dashboard</code> 查看完整報告！</p>"
+        )
 
     logger.info("✅ Analysis complete! Launch the dashboard to view reports:")
     logger.info("   python main.py dashboard")
@@ -209,15 +226,29 @@ def cmd_backfill(config, since_date, limit=None):
         logger.info(f"  → [{v['video_id']}] {v['title']}")
         
     # Process them one by one
+    email_body = "<h2>股癌歷史影片分析完成</h2><br><ul>"
+    processed_count = 0
+    
     for i, video_info in enumerate(videos):
         logger.info(f"=== Processing Backfill {i+1}/{len(videos)} ===")
-        process_video(video_info, config)
+        report = process_video(video_info, config)
+        if report:
+            processed_count += 1
+            recs = report.get('recommendations', [])
+            email_body += f"<li><strong>{video_info['title']}</strong>: 找到 {len(recs)} 檔推薦標的</li>"
         
     logger.info("📈 Updating performance tracking...")
     performance_tracker.update_all_prices()
     
     logger.info("📄 Generating static site...")
     static_generator.generate_static_site()
+    
+    if processed_count > 0:
+        notifier.send_email_notification(
+            config,
+            f"📈 股癌歷史影片分析完成 ({processed_count}部)",
+            email_body + "<p>請前往 GitHub Pages 查看完整報告與族群輪動趨勢！</p>"
+        )
     
     logger.info("✅ Backfill complete!")
 
