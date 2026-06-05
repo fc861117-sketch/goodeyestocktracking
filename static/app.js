@@ -276,45 +276,47 @@ async function loadTracking() {
         }
 
         container.innerHTML = `
-            <table class="tracking-table">
-                <thead>
-                    <tr>
-                        <th>標的</th>
-                        <th>市場</th>
-                        <th>推薦來源</th>
-                        <th>推薦時股價</th>
-                        <th>最新股價</th>
-                        <th>漲跌幅</th>
-                        <th>情緒</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${recs.map(rec => `
-                        <tr onclick="showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">
-                            <td>
-                                <div style="display:flex; align-items:center; gap:8px">
-                                    <button class="btn-pin ${pinnedStocks.includes(rec.stock_symbol) ? 'pinned' : ''}" 
-                                            onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">
-                                        📌
-                                    </button>
-                                    <div>
-                                        <strong>${escHtml(rec.stock_name || '')}</strong>
-                                        <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.stock_symbol)}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>${rec.market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股'}</td>
-                            <td style="font-size:13px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(rec.video_title || '')}</td>
-                            <td>${formatPrice(rec.price_at_mention)}</td>
-                            <td>${formatPrice(rec.latest_price)}</td>
-                            <td class="${getChangeClass(rec.latest_change_pct)}">${formatChange(rec.latest_change_pct)}</td>
-                            <td><span class="sentiment-badge ${rec.sentiment || 'neutral'}">${{ bullish: '看多', bearish: '看空', neutral: '中性' }[rec.sentiment] || '中性'}</span></td>
-                            <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢</button></td>
+            <div class="table-responsive">
+                <table class="tracking-table">
+                    <thead>
+                        <tr>
+                            <th>標的</th>
+                            <th>市場</th>
+                            <th>推薦來源</th>
+                            <th>推薦時股價</th>
+                            <th>最新股價</th>
+                            <th>漲跌幅</th>
+                            <th>情緒</th>
+                            <th>操作</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${recs.map(rec => `
+                            <tr onclick="showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">
+                                <td>
+                                    <div style="display:flex; align-items:center; gap:8px">
+                                        <button class="btn-pin ${pinnedStocks.includes(rec.stock_symbol) ? 'pinned' : ''}" 
+                                                onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">
+                                            📌
+                                        </button>
+                                        <div>
+                                            <strong>${escHtml(rec.stock_name || '')}</strong>
+                                            <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.stock_symbol)}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>${rec.market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股'}</td>
+                                <td style="font-size:13px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(rec.video_title || '')}</td>
+                                <td>${formatPrice(rec.price_at_mention)}</td>
+                                <td>${formatPrice(rec.latest_price)}</td>
+                                <td class="${getChangeClass(rec.latest_change_pct)}">${formatChange(rec.latest_change_pct)}</td>
+                                <td><span class="sentiment-badge ${rec.sentiment || 'neutral'}">${{ bullish: '看多', bearish: '看空', neutral: '中性' }[rec.sentiment] || '中性'}</span></td>
+                                <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
         `;
     } catch (err) {
         console.error('Tracking load error:', err);

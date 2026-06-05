@@ -602,9 +602,17 @@ body::before {
     white-space: pre-wrap;
 }
 
+/* --- Table Responsive Wrapper --- */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* --- Tracking Table --- */
 .tracking-table {
     width: 100%;
+    min-width: 800px;
     border-collapse: separate;
     border-spacing: 0;
     background: var(--bg-card);
@@ -868,25 +876,50 @@ body::before {
     .header-content {
         flex-direction: column;
         height: auto;
-        padding: 16px 0;
-        gap: 12px;
+        padding: 12px 0;
+        gap: 8px;
+    }
+    .logo-icon {
+        font-size: 24px;
+    }
+    .logo h1 {
+        font-size: 18px;
     }
     .summary-cards {
         grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    .summary-card {
+        padding: 16px 12px;
+    }
+    .card-icon {
+        font-size: 24px;
+    }
+    .card-value {
+        font-size: 24px;
     }
     .tabs {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 4px;
+    }
+    .tabs::-webkit-scrollbar {
+        display: none;
     }
     .tab {
-        flex: none;
-        width: calc(50% - 2px);
+        flex: 0 0 auto;
+        white-space: nowrap;
     }
     .stock-prices {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr;
     }
     .modal {
-        width: 95%;
-        margin: 16px;
+        width: 100%;
+        margin: 0;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
     }
 }
 
