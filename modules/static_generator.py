@@ -32,7 +32,7 @@ def generate_static_site():
     
     # Precompute details for each video
     for v in videos:
-        v_recs = db.get_recommendations_by_video(v['video_id'])
+        v_recs = db.get_recommendations_for_video(v['video_id'])
         data['details'][v['video_id']] = {
             'video': dict(v),
             'recommendations': [dict(r) for r in v_recs]
@@ -40,7 +40,7 @@ def generate_static_site():
         
     # Precompute performance history for each recommendation
     for r in recs:
-        history = db.get_price_history(r['id'])
+        history = db.get_performance_history(r['id'])
         data['performance'][r['id']] = {
             'recommendation': dict(r),
             'history': [dict(h) for h in history]
