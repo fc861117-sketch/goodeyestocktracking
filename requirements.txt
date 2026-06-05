@@ -1,0 +1,9 @@
+feedparser
+yt-dlp
+faster-whisper
+google-genai
+yfinance
+twstock
+jinja2
+flask
+schedule

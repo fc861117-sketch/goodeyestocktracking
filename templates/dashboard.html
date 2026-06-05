@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股癌分析儀表板 | Gooaye Stock Analyzer</title>
+    <meta name="description" content="自動分析股癌Podcast內容，追蹤推薦標的績效">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">📊</span>
+                <div>
+                    <h1>股癌分析儀表板</h1>
+                    <p class="subtitle">Gooaye Stock Analyzer</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <span class="last-update" id="lastUpdate">載入中...</span>
+                <button class="btn btn-primary" id="btnUpdatePrices" onclick="updatePrices()">
+                    <span class="btn-icon">🔄</span> 更新股價
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <!-- Summary Cards -->
+        <section class="summary-section" id="summarySection">
+            <div class="summary-cards">
+                <div class="card summary-card">
+                    <div class="card-icon">📺</div>
+                    <div class="card-value" id="totalVideos">-</div>
+                    <div class="card-label">已分析影片</div>
+                </div>
+                <div class="card summary-card">
+                    <div class="card-icon">📋</div>
+                    <div class="card-value" id="totalRecs">-</div>
+                    <div class="card-label">推薦標的</div>
+                </div>
+                <div class="card summary-card performance-card">
+                    <div class="card-icon">📈</div>
+                    <div class="card-value" id="avgPerformance">-</div>
+                    <div class="card-label">平均績效</div>
+                </div>
+                <div class="card summary-card best-card">
+                    <div class="card-icon">🏆</div>
+                    <div class="card-value" id="bestPerformer">-</div>
+                    <div class="card-label">最佳表現</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tabs Navigation -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="latest" onclick="switchTab('latest')">
+                🆕 最新報告
+            </button>
+            <button class="tab" data-tab="tracking" onclick="switchTab('tracking')">
+                📈 標的追蹤
+            </button>
+            <button class="tab" data-tab="history" onclick="switchTab('history')">
+                📋 歷史報告
+            </button>
+            <button class="tab" data-tab="sectors" onclick="switchTab('sectors')">
+                🏭 產業分布
+            </button>
+        </nav>
+
+        <!-- Tab Contents -->
+
+        <!-- Latest Report Tab -->
+        <section class="tab-content active" id="tab-latest">
+            <div class="section-header">
+                <h2>最新分析報告</h2>
+            </div>
+            <div id="latestReport" class="latest-report-container">
+                <div class="empty-state">
+                    <div class="empty-icon">🎙️</div>
+                    <h3>尚無分析報告</h3>
+                    <p>執行 <code>python main.py analyze</code> 來分析股癌最新的影片</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tracking Tab -->
+        <section class="tab-content" id="tab-tracking">
+            <div class="section-header">
+                <h2>推薦標的追蹤</h2>
+                <p class="section-desc">追蹤所有推薦標的自推薦日至今的表現</p>
+            </div>
+            <div id="trackingTable" class="tracking-container">
+                <div class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <h3>尚無追蹤資料</h3>
+                </div>
+            </div>
+            <!-- Performance Chart Modal -->
+            <div class="modal-overlay" id="chartModal" style="display:none">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 id="chartTitle">績效走勢</h3>
+                        <button class="modal-close" onclick="closeChartModal()">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                    <div class="modal-detail" id="modalDetail"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- History Tab -->
+        <section class="tab-content" id="tab-history">
+            <div class="section-header">
+                <h2>歷史報告</h2>
+            </div>
+            <div id="historyList" class="history-container">
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <h3>尚無歷史報告</h3>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sectors Tab -->
+        <section class="tab-content" id="tab-sectors">
+            <div class="section-header">
+                <h2>產業分布</h2>
+            </div>
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <h3>推薦標的產業分布</h3>
+                    <canvas id="sectorChart"></canvas>
+                </div>
+                <div class="card chart-card">
+                    <h3>情緒分布</h3>
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <footer class="footer">
+        <p>⚠️ 本系統產出的報告僅供參考，不構成任何投資建議。投資有風險，請自行評估。</p>
+        <p class="footer-sub">Powered by Gooaye Stock Analyzer v1.0</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

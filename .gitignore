@@ -1,0 +1,6 @@
+__pycache__/
+data/
+config.json
+push_to_github.ps1
+*.log
+*.pyc
