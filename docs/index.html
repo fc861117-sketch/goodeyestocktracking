@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="./static/style.css">
 </head>
 <body>
     <!-- Header -->
@@ -24,7 +24,7 @@
             </div>
             <div class="header-actions">
                 <span class="last-update" id="lastUpdate">載入中...</span>
-                <button class="btn btn-primary" id="btnUpdatePrices" onclick="updatePrices()">
+                <button class="btn btn-primary" id="btnUpdatePrices" style="display:none" onclick="updatePrices()">
                     <span class="btn-icon">🔄</span> 更新股價
                 </button>
             </div>
@@ -160,6 +160,6 @@
         <p class="footer-sub">Powered by Gooaye Stock Analyzer v1.0</p>
     </footer>
 
-    <script src="/static/app.js"></script>
+    <script src="./static/app.js"></script>
 </body>
 </html>

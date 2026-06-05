@@ -72,5 +72,62 @@ def check_new_videos(channel_id, max_initial=1):
                 max_initial, len(new_videos)
             )
             new_videos = new_videos[:max_initial]
+        elif total_in_db > 0 and len(new_videos) > max_initial:
+            # If user explicitly passed a limit or we just want to limit batch size
+            logger.info(
+                "Limiting to %d most recent videos (out of %d new)",
+                max_initial, len(new_videos)
+            )
+            new_videos = new_videos[:max_initial]
 
     return new_videos
+
+def fetch_videos_since(channel_id, since_date_str, limit=None):
+    """
+    Fetch all videos since a specific date using yt-dlp.
+    since_date_str format: YYYYMMDD (e.g., '20260501')
+    """
+    import yt_dlp
+    
+    logger.info("Fetching playlist metadata using yt-dlp since %s", since_date_str)
+    
+    url = f"https://www.youtube.com/channel/{channel_id}"
+    
+    ydl_opts = {
+        'extract_flat': True,
+        'quiet': False,
+        'dateafter': since_date_str,
+    }
+    
+    videos_to_process = []
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                for entry in info['entries']:
+                    video_id = entry.get('id')
+                    if not video_id:
+                        continue
+                    
+                    if db.is_video_processed(video_id):
+                        logger.debug("Video already processed: %s", video_id)
+                        continue
+                        
+                    videos_to_process.append({
+                        'video_id': video_id,
+                        'title': entry.get('title', 'Unknown'),
+                        'url': entry.get('url', f'https://www.youtube.com/watch?v={video_id}'),
+                        'published_at': entry.get('upload_date', '')
+                    })
+    except Exception as e:
+        logger.error("Failed to fetch videos via yt-dlp: %s", e)
+        
+    videos_to_process = list(reversed(videos_to_process)) # oldest first
+    
+    if limit and len(videos_to_process) > limit:
+        # If limiting, take the most recent ones up to limit
+        videos_to_process = videos_to_process[-limit:]
+        
+    return videos_to_process
+

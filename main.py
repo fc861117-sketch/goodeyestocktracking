@@ -5,7 +5,8 @@ Usage:
     python main.py analyze          Check for new videos and analyze them
     python main.py update-prices    Update current prices for tracked stocks
     python main.py dashboard        Launch the Web Dashboard
-    python main.py analyze-all      Force re-analyze all unprocessed videos
+    python main.py generate-static  Generate static HTML and data.json for GitHub Pages
+    python main.py backfill <date>  Fetch and analyze all videos since YYYYMMDD (e.g. 20260501)
 """
 
 import sys
@@ -32,6 +33,7 @@ from modules import audio_downloader
 from modules import transcriber
 from modules import report_generator
 from modules import performance_tracker
+from modules import static_generator
 
 
 def setup_logging():
@@ -126,15 +128,17 @@ def process_video(video_info, config):
         return None
 
 
-def cmd_analyze(config):
+def cmd_analyze(config, limit=None):
     """Check for new videos and analyze them."""
     logger = logging.getLogger('main')
 
     logger.info("🔍 Checking for new videos from 股癌 (Gooaye)...")
+    
+    limit_val = limit if limit is not None else config.get('max_initial_videos', 1)
 
     new_videos = youtube_monitor.check_new_videos(
         config['youtube_channel_id'],
-        max_initial=config.get('max_initial_videos', 1)
+        max_initial=limit_val
     )
 
     if not new_videos:
@@ -169,8 +173,53 @@ def cmd_analyze(config):
     logger.info("📈 Updating performance tracking...")
     performance_tracker.update_all_prices()
 
+    # Generate static site for GitHub pages
+    logger.info("📄 Generating static site for GitHub Pages...")
+    static_generator.generate_static_site()
+
     logger.info("✅ Analysis complete! Launch the dashboard to view reports:")
     logger.info("   python main.py dashboard")
+    logger.info("   (Or open docs/index.html directly)")
+
+
+def cmd_generate_static(config):
+    """Generate static site from current database."""
+    logger = logging.getLogger('main')
+    logger.info("📄 Generating static site...")
+    static_generator.generate_static_site()
+    logger.info("✅ Static site generated in docs/ folder.")
+
+def cmd_backfill(config, since_date, limit=None):
+    """Fetch and process old videos using yt-dlp from a specific date."""
+    logger = logging.getLogger('main')
+    logger.info(f"⏪ Backfilling videos since {since_date}...")
+    
+    videos = youtube_monitor.fetch_videos_since(
+        config['youtube_channel_id'],
+        since_date,
+        limit=limit
+    )
+    
+    if not videos:
+        logger.info("No videos found to backfill.")
+        return
+        
+    logger.info(f"Found {len(videos)} videos to backfill.")
+    for v in videos:
+        logger.info(f"  → [{v['video_id']}] {v['title']}")
+        
+    # Process them one by one
+    for i, video_info in enumerate(videos):
+        logger.info(f"=== Processing Backfill {i+1}/{len(videos)} ===")
+        process_video(video_info, config)
+        
+    logger.info("📈 Updating performance tracking...")
+    performance_tracker.update_all_prices()
+    
+    logger.info("📄 Generating static site...")
+    static_generator.generate_static_site()
+    
+    logger.info("✅ Backfill complete!")
 
 
 def cmd_update_prices(config):
@@ -215,15 +264,20 @@ Commands:
   analyze         Check for new videos and generate analysis reports
   update-prices   Update current prices for all tracked stocks
   dashboard       Launch the Web Dashboard (http://localhost:5000)
+  generate-static Generate static site to docs/ for GitHub Pages
+  backfill        Analyze all videos since a given date
 
 Examples:
   python main.py analyze
-  python main.py update-prices
   python main.py dashboard
+  python main.py generate-static
+  python main.py backfill 20260501
         """
     )
-    parser.add_argument('command', choices=['analyze', 'update-prices', 'dashboard'],
+    parser.add_argument('command', choices=['analyze', 'update-prices', 'dashboard', 'generate-static', 'backfill'],
                         help='Command to execute')
+    parser.add_argument('date', nargs='?', default=None, help='Date for backfill (YYYYMMDD)')
+    parser.add_argument('--limit', type=int, default=None, help='Limit the number of videos to process')
 
     args = parser.parse_args()
 
@@ -240,11 +294,18 @@ Examples:
 
     # Execute command
     if args.command == 'analyze':
-        cmd_analyze(config)
+        cmd_analyze(config, args.limit)
     elif args.command == 'update-prices':
         cmd_update_prices(config)
     elif args.command == 'dashboard':
         cmd_dashboard(config)
+    elif args.command == 'generate-static':
+        cmd_generate_static(config)
+    elif args.command == 'backfill':
+        if not args.date:
+            logger.error("❌ backfill command requires a date argument (YYYYMMDD). Example: python main.py backfill 20260501")
+            sys.exit(1)
+        cmd_backfill(config, args.date, args.limit)
 
 
 if __name__ == '__main__':
