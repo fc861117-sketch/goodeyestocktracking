@@ -23,6 +23,9 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button class="btn btn-ghost" onclick="openSettingsModal()" title="同步設定">
+                    <span class="btn-icon">⚙️</span>
+                </button>
                 <span class="last-update" id="lastUpdate">載入中...</span>
                 <button class="btn btn-primary" id="btnUpdatePrices" style="display:none" onclick="updatePrices()">
                     <span class="btn-icon">🔄</span> 更新股價
@@ -122,9 +125,11 @@
 
         <!-- Watchlist Tab -->
         <section class="tab-content" id="tab-watchlist">
-            <div class="section-header">
-                <h2>📌 我的追蹤 (Watchlist)</h2>
-                <p class="section-desc">您已釘選的個股，資料保存在瀏覽器本機中</p>
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2>📌 我的追蹤 (Watchlist)</h2>
+                    <p class="section-desc">您已釘選的個股 <span id="syncStatusBadge" class="sentiment-badge neutral" style="margin-left:8px;font-size:10px">本機模式</span></p>
+                </div>
             </div>
             <div id="watchlistTable" class="tracking-container">
                 <div class="empty-state">
@@ -169,6 +174,29 @@
             </div>
         </section>
     </main>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal" style="display:none">
+        <div class="modal" style="max-width:500px">
+            <div class="modal-header">
+                <h3>⚙️ 跨裝置同步設定</h3>
+                <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
+                    請輸入您的 GitHub Personal Access Token (PAT)，我們將利用您的 GitHub Repository 作為免費的雲端資料庫，自動同步您的追蹤清單。
+                </p>
+                <div style="margin-bottom:20px;">
+                    <label style="display:block; font-size:13px; margin-bottom:8px; color:var(--text-muted)">GitHub Token (需具備 repo 權限)</label>
+                    <input type="password" id="githubTokenInput" placeholder="ghp_..." style="width:100%; padding:10px 12px; background:var(--bg-primary); border:1px solid var(--border-color); color:white; border-radius:var(--radius-sm); font-family:monospace;">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <button class="btn btn-ghost" onclick="clearSettings()">清除設定</button>
+                    <button class="btn btn-primary" onclick="saveSettings()">儲存並同步</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>

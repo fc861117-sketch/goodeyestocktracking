@@ -5,6 +5,8 @@
 // --- State ---
 let currentChart = null;
 let pinnedStocks = JSON.parse(localStorage.getItem('gooaye_watchlist') || '[]');
+let githubApiToken = localStorage.getItem('gooaye_github_token') || '';
+let watchlistSha = null;
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,14 +20,23 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 window._staticData = data;
-                loadDashboard();
+                // If token exists, try to sync first before loading dashboard
+                if (githubApiToken) {
+                    syncWatchlistFromGitHub().then(() => loadDashboard());
+                } else {
+                    loadDashboard();
+                }
             })
             .catch(err => {
                 console.error('Failed to load static data.json', err);
                 document.getElementById('latestReport').innerHTML = '<div class="empty-state"><h3>無法載入靜態資料</h3></div>';
             });
     } else {
-        loadDashboard();
+        if (githubApiToken) {
+            syncWatchlistFromGitHub().then(() => loadDashboard());
+        } else {
+            loadDashboard();
+        }
     }
 });
 
@@ -324,6 +335,11 @@ function togglePinStatus(symbol) {
     // Refresh tables
     loadTracking();
     loadWatchlist();
+
+    // Auto-sync to GitHub if token exists
+    if (githubApiToken) {
+        syncWatchlistToGitHub();
+    }
 }
 
 async function loadWatchlist() {
@@ -369,8 +385,145 @@ async function loadWatchlist() {
                 ${pinnedRecs.map(rec => renderStockCard(rec)).join('')}
             </div>
         `;
+        
+        updateSyncStatusUI();
     } catch (err) {
         console.error('Watchlist load error:', err);
+    }
+}
+
+// --- GitHub Sync Settings ---
+function openSettingsModal() {
+    document.getElementById('githubTokenInput').value = githubApiToken;
+    document.getElementById('settingsModal').style.display = 'flex';
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsModal').style.display = 'none';
+}
+
+function saveSettings() {
+    const token = document.getElementById('githubTokenInput').value.trim();
+    if (token) {
+        githubApiToken = token;
+        localStorage.setItem('gooaye_github_token', githubApiToken);
+        showToast('設定已儲存，正在同步中...', 'info');
+        closeSettingsModal();
+        syncWatchlistFromGitHub().then(() => {
+            loadTracking();
+            loadWatchlist();
+        });
+    } else {
+        showToast('請輸入 Token', 'error');
+    }
+}
+
+function clearSettings() {
+    githubApiToken = '';
+    watchlistSha = null;
+    localStorage.removeItem('gooaye_github_token');
+    document.getElementById('githubTokenInput').value = '';
+    updateSyncStatusUI();
+    showToast('同步設定已清除', 'info');
+    closeSettingsModal();
+}
+
+function updateSyncStatusUI() {
+    const badge = document.getElementById('syncStatusBadge');
+    if (!badge) return;
+    
+    if (githubApiToken) {
+        badge.className = 'sentiment-badge bullish';
+        badge.innerHTML = '🟢 雲端同步中';
+    } else {
+        badge.className = 'sentiment-badge neutral';
+        badge.innerHTML = '本機模式';
+    }
+}
+
+async function syncWatchlistFromGitHub() {
+    if (!githubApiToken) return;
+    
+    try {
+        const url = 'https://api.github.com/repos/fc861117-sketch/goodeyestocktracking/contents/docs/watchlist.json';
+        const res = await fetch(url, {
+            headers: {
+                'Authorization': `token ${githubApiToken}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            watchlistSha = data.sha;
+            
+            // Decode base64 content
+            const content = decodeURIComponent(escape(atob(data.content)));
+            const remoteStocks = JSON.parse(content || '[]');
+            
+            // Merge remote and local (simple union)
+            const merged = [...new Set([...pinnedStocks, ...remoteStocks])];
+            if (merged.length !== pinnedStocks.length || JSON.stringify(merged) !== JSON.stringify(pinnedStocks)) {
+                pinnedStocks = merged;
+                localStorage.setItem('gooaye_watchlist', JSON.stringify(pinnedStocks));
+                showToast('已從雲端載入最新追蹤清單', 'success');
+            }
+        } else if (res.status === 404) {
+            // File doesn't exist yet, push current local state to create it
+            await syncWatchlistToGitHub();
+        } else {
+            console.error('GitHub API returned status:', res.status);
+            showToast('雲端同步失敗，請檢查 Token 權限', 'error');
+        }
+    } catch (err) {
+        console.error('Failed to sync from GitHub', err);
+    }
+}
+
+async function syncWatchlistToGitHub() {
+    if (!githubApiToken) return;
+    
+    try {
+        const url = 'https://api.github.com/repos/fc861117-sketch/goodeyestocktracking/contents/docs/watchlist.json';
+        
+        // Encode content to base64
+        const contentStr = JSON.stringify(pinnedStocks, null, 2);
+        const encodedContent = btoa(unescape(encodeURIComponent(contentStr)));
+        
+        const body = {
+            message: 'sync: Update watchlist from dashboard',
+            content: encodedContent,
+            branch: 'main'
+        };
+        
+        if (watchlistSha) {
+            body.sha = watchlistSha;
+        }
+        
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${githubApiToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            watchlistSha = data.content.sha;
+            console.log('Successfully synced to GitHub');
+        } else if (res.status === 409) {
+            // Conflict (sha mismatch). We should re-fetch and merge
+            console.warn('Conflict syncing to GitHub, retrying...');
+            await syncWatchlistFromGitHub();
+            await syncWatchlistToGitHub(); // Retry after fetching latest sha
+        } else {
+            console.error('Failed to sync to GitHub:', await res.text());
+        }
+    } catch (err) {
+        console.error('Failed to sync to GitHub', err);
     }
 }
 
@@ -486,17 +639,19 @@ function closeChartModal() {
     }
 }
 
-// Close modal on overlay click
+// Close modals on overlay click
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) {
-        closeChartModal();
+        if (e.target.id === 'chartModal') closeChartModal();
+        if (e.target.id === 'settingsModal') closeSettingsModal();
     }
 });
 
-// Close modal on Escape key
+// Close modals on Escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeChartModal();
+        closeSettingsModal();
     }
 });
 
