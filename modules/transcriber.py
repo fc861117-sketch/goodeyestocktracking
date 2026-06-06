@@ -30,31 +30,28 @@ def transcribe(audio_path, model_name="medium", device="cuda", language="zh"):
     logger.info("Transcribing: %s (%.1f MB) with model=%s device=%s",
                 audio_path, file_size, model_name, device)
 
+    # Add NVIDIA CUDA/cuDNN DLLs to path if installed in python packages
+    try:
+        import sys
+        site_packages = [p for p in sys.path if p.endswith('site-packages')]
+        if site_packages:
+            sp = site_packages[0]
+            cublas_bin = os.path.join(sp, 'nvidia', 'cublas', 'bin')
+            cudnn_bin = os.path.join(sp, 'nvidia', 'cudnn', 'bin')
+            if os.path.exists(cublas_bin) and cublas_bin not in os.environ['PATH']:
+                os.environ['PATH'] = cublas_bin + os.pathsep + os.environ['PATH']
+                logger.info("Added to PATH: %s", cublas_bin)
+            if os.path.exists(cudnn_bin) and cudnn_bin not in os.environ['PATH']:
+                os.environ['PATH'] = cudnn_bin + os.pathsep + os.environ['PATH']
+                logger.info("Added to PATH: %s", cudnn_bin)
+    except Exception as e:
+        logger.warning("Failed to add NVIDIA library paths: %s", e)
+
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         logger.error("faster-whisper not installed. Run: pip install faster-whisper")
         raise
-
-    # Determine compute type based on device
-    if device == "cuda":
-        compute_type = "float16"  # Best for NVIDIA GPUs
-    else:
-        compute_type = "int8"     # Best for CPU
-
-    try:
-        logger.info("Loading Whisper model '%s' on %s (compute_type=%s)...",
-                     model_name, device, compute_type)
-        model = WhisperModel(model_name, device=device, compute_type=compute_type)
-        logger.info("Model loaded successfully.")
-    except Exception as e:
-        if device == "cuda":
-            logger.warning("CUDA failed (%s), falling back to CPU...", e)
-            device = "cpu"
-            compute_type = "int8"
-            model = WhisperModel(model_name, device=device, compute_type=compute_type)
-        else:
-            raise
 
     # Initial prompt helps guide the model for Traditional Chinese financial content
     initial_prompt = (
@@ -64,9 +61,12 @@ def transcribe(audio_path, model_name="medium", device="cuda", language="zh"):
         "半導體、AI、費城半導體指數、聯準會、Fed、CPI。"
     )
 
-    logger.info("Starting transcription (language=%s)...", language)
-
-    try:
+    def run_transcription(dev, comp_type):
+        logger.info("Loading Whisper model '%s' on %s (compute_type=%s)...",
+                     model_name, dev, comp_type)
+        model = WhisperModel(model_name, device=dev, compute_type=comp_type)
+        logger.info("Model loaded successfully. Starting transcription (language=%s)...", language)
+        
         segments, info = model.transcribe(
             audio_path,
             language=language,
@@ -82,10 +82,18 @@ def transcribe(audio_path, model_name="medium", device="cuda", language="zh"):
         # Collect all segments
         text_parts = []
         total_duration = 0
+        last_reported_pct = -5
 
         for segment in segments:
             text_parts.append(segment.text.strip())
             total_duration = max(total_duration, segment.end)
+            
+            # Print progress every 5%
+            if info.duration > 0:
+                pct = (segment.end / info.duration) * 100
+                if pct - last_reported_pct >= 5:
+                    logger.info("Transcription progress: %.1f%%", pct)
+                    last_reported_pct = pct
 
         full_text = ' '.join(text_parts)
 
@@ -101,9 +109,14 @@ def transcribe(audio_path, model_name="medium", device="cuda", language="zh"):
 
         return full_text
 
-    except Exception as e:
-        logger.error("Transcription failed: %s", e)
-        raise
+    if device == "cuda":
+        try:
+            return run_transcription("cuda", "float16")
+        except Exception as e:
+            logger.warning("CUDA transcription failed (%s). Falling back to CPU...", e)
+            return run_transcription("cpu", "int8")
+    else:
+        return run_transcription("cpu", "int8")
 
 
 def _clean_transcript(text):
