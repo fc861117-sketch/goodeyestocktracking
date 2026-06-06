@@ -176,8 +176,12 @@ async function loadLatestReport() {
 
 function renderStockCard(rec) {
     const sentiment = rec.sentiment || 'neutral';
-    const sentimentLabel = { bullish: '看多', bearish: '看空', neutral: '中性' }[sentiment] || '中性';
+    const sentimentLabel = rec.is_custom ? '自選' : ({ bullish: '看多', bearish: '看空', neutral: '中性' }[sentiment] || '中性');
     const cardId = `stock-${rec.id}`;
+    
+    const targetPriceHTML = rec.is_custom ? '-' : formatPrice(rec.target_price);
+    const stopLossHTML = rec.is_custom ? '-' : formatPrice(rec.stop_loss);
+    const buyPriceHTML = rec.is_custom ? '-' : formatPrice(rec.buy_price);
 
     return `
         <div class="card stock-card ${sentiment}" onclick="toggleStockDetail('${cardId}')">
@@ -193,16 +197,16 @@ function renderStockCard(rec) {
             
             <div class="stock-prices">
                 <div class="price-item">
-                    <div class="price-label">目前股價</div>
+                    <div class="price-label">${rec.is_custom ? '加入價格' : '目前股價'}</div>
                     <div class="price-value">${formatPrice(rec.price_at_mention)}</div>
                 </div>
                 <div class="price-item">
                     <div class="price-label">目標價</div>
-                    <div class="price-value green">${formatPrice(rec.target_price)}</div>
+                    <div class="price-value green">${targetPriceHTML}</div>
                 </div>
                 <div class="price-item">
                     <div class="price-label">停損價</div>
-                    <div class="price-value red">${formatPrice(rec.stop_loss)}</div>
+                    <div class="price-value red">${stopLossHTML}</div>
                 </div>
             </div>
             
@@ -210,7 +214,7 @@ function renderStockCard(rec) {
                 <div class="stock-prices" style="margin-bottom:16px">
                     <div class="price-item">
                         <div class="price-label">建議買入</div>
-                        <div class="price-value yellow">${formatPrice(rec.buy_price)}</div>
+                        <div class="price-value yellow">${buyPriceHTML}</div>
                     </div>
                     <div class="price-item">
                         <div class="price-label">最新價格</div>
@@ -222,30 +226,35 @@ function renderStockCard(rec) {
                     </div>
                 </div>
 
-                ${rec.short_term_advice ? `
+                ${!rec.is_custom && rec.short_term_advice ? `
                     <div class="advice-section">
                         <div class="advice-title">⚡ 短期建議（1-3個月）</div>
                         <div class="advice-text">${escHtml(rec.short_term_advice)}</div>
                     </div>
                 ` : ''}
-                ${rec.mid_term_advice ? `
+                ${!rec.is_custom && rec.mid_term_advice ? `
                     <div class="advice-section">
                         <div class="advice-title">📊 中期建議（3-12個月）</div>
                         <div class="advice-text">${escHtml(rec.mid_term_advice)}</div>
                     </div>
                 ` : ''}
-                ${rec.long_term_advice ? `
+                ${!rec.is_custom && rec.long_term_advice ? `
                     <div class="advice-section">
                         <div class="advice-title">🏗️ 長期建議（1年以上）</div>
                         <div class="advice-text">${escHtml(rec.long_term_advice)}</div>
                     </div>
                 ` : ''}
-                ${rec.analysis_detail ? `
+                ${!rec.is_custom && rec.analysis_detail ? `
                     <div class="advice-section">
                         <div class="advice-title">📋 完整分析</div>
                         <div class="analysis-full">${escHtml(rec.analysis_detail)}</div>
                     </div>
                 ` : ''}
+                
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); showPerformanceChart('${escAttr(rec.stock_symbol)}', '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢圖</button>
+                    <button class="btn btn-sm btn-ghost red" onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">❌ 取消追蹤</button>
+                </div>
             </div>
         </div>
     `;
@@ -275,6 +284,33 @@ async function loadTracking() {
             return; // Keep empty state
         }
 
+        // Group by stock_symbol
+        const groupedMap = new Map();
+        recs.forEach(rec => {
+            const sym = rec.stock_symbol;
+            if (!groupedMap.has(sym)) {
+                groupedMap.set(sym, {
+                    symbol: sym,
+                    name: rec.stock_name || sym,
+                    market: rec.market || 'TW',
+                    mentions: [],
+                    latest_price: rec.latest_price,
+                    latest_change_pct: rec.latest_change_pct,
+                    last_tracked: rec.last_tracked
+                });
+            }
+            groupedMap.get(sym).mentions.push(rec);
+        });
+
+        const groupedRecs = Array.from(groupedMap.values());
+
+        // Sort by the latest mention's creation date (newest first)
+        groupedRecs.sort((a, b) => {
+            const dateA = new Date(a.mentions[0].created_at || 0);
+            const dateB = new Date(b.mentions[0].created_at || 0);
+            return dateB - dateA;
+        });
+
         container.innerHTML = `
             <div class="table-responsive">
                 <table class="tracking-table">
@@ -282,38 +318,49 @@ async function loadTracking() {
                         <tr>
                             <th>標的</th>
                             <th>市場</th>
-                            <th>推薦來源</th>
-                            <th>推薦時股價</th>
+                            <th>提及次數</th>
+                            <th>首次提及價格</th>
                             <th>最新股價</th>
-                            <th>漲跌幅</th>
-                            <th>情緒</th>
+                            <th>累積漲跌幅</th>
+                            <th>最新情緒</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${recs.map(rec => `
-                            <tr onclick="showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">
-                                <td>
-                                    <div style="display:flex; align-items:center; gap:8px">
-                                        <button class="btn-pin ${pinnedStocks.includes(rec.stock_symbol) ? 'pinned' : ''}" 
-                                                onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">
-                                            📌
-                                        </button>
-                                        <div>
-                                            <strong>${escHtml(rec.stock_name || '')}</strong>
-                                            <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.stock_symbol)}</div>
+                        ${groupedRecs.map(rec => {
+                            const earliestMention = rec.mentions[rec.mentions.length - 1];
+                            const latestMention = rec.mentions[0];
+                            const firstPrice = earliestMention.price_at_mention || 0;
+                            const latestPrice = rec.latest_price || latestMention.latest_price || 0;
+                            let accumChange = 0;
+                            if (firstPrice > 0) {
+                                accumChange = ((latestPrice - firstPrice) / firstPrice * 100).toFixed(2);
+                            }
+                            
+                            return `
+                                <tr onclick="showPerformanceChart('${escAttr(rec.symbol)}', '${escAttr(rec.name)}')">
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:8px">
+                                            <button class="btn-pin ${pinnedStocks.includes(rec.symbol) ? 'pinned' : ''}" 
+                                                    onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.symbol)}')">
+                                                📌
+                                            </button>
+                                            <div>
+                                                <strong>${escHtml(rec.name)}</strong>
+                                                <div style="font-size:12px;color:var(--text-muted)">${escHtml(rec.symbol)}</div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </td>
-                                <td>${rec.market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股'}</td>
-                                <td style="font-size:13px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(rec.video_title || '')}</td>
-                                <td>${formatPrice(rec.price_at_mention)}</td>
-                                <td>${formatPrice(rec.latest_price)}</td>
-                                <td class="${getChangeClass(rec.latest_change_pct)}">${formatChange(rec.latest_change_pct)}</td>
-                                <td><span class="sentiment-badge ${rec.sentiment || 'neutral'}">${{ bullish: '看多', bearish: '看空', neutral: '中性' }[rec.sentiment] || '中性'}</span></td>
-                                <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();showPerformanceChart(${rec.id}, '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢</button></td>
-                            </tr>
-                        `).join('')}
+                                    </td>
+                                    <td>${rec.market === 'TW' ? '🇹🇼 台股' : '🇺🇸 美股'}</td>
+                                    <td><span style="background:rgba(99,102,241,0.1);color:#818cf8;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">🎙️ ${rec.mentions.length} 次</span></td>
+                                    <td>${formatPrice(firstPrice)}</td>
+                                    <td>${formatPrice(latestPrice)}</td>
+                                    <td class="${getChangeClass(accumChange)}">${formatChange(accumChange)}</td>
+                                    <td><span class="sentiment-badge ${latestMention.sentiment || 'neutral'}">${{ bullish: '看多', bearish: '看空', neutral: '中性' }[latestMention.sentiment] || '中性'}</span></td>
+                                    <td><button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();showPerformanceChart('${escAttr(rec.symbol)}', '${escAttr(rec.name)}')">📈 走勢</button></td>
+                                </tr>
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
@@ -360,36 +407,89 @@ async function loadWatchlist() {
         }
 
         const container = document.getElementById('watchlistTable');
-        
-        // Filter out only the most recent recommendation for each pinned stock symbol
-        const pinnedRecsMap = new Map();
-        if (recs && recs.length > 0) {
-            recs.forEach(rec => {
-                if (pinnedStocks.includes(rec.stock_symbol)) {
-                    // Because they are sorted by date descending, the first one we encounter is the latest
-                    if (!pinnedRecsMap.has(rec.stock_symbol)) {
-                        pinnedRecsMap.set(rec.stock_symbol, rec);
-                    }
-                }
-            });
-        }
-        
-        const pinnedRecs = Array.from(pinnedRecsMap.values());
 
-        if (pinnedRecs.length === 0) {
+        if (pinnedStocks.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📌</div>
                     <h3>尚未釘選任何標的</h3>
-                    <p>請到「標的追蹤」中點擊圖示加入追蹤</p>
+                    <p>請到「標的追蹤」中點擊圖示加入追蹤，或在上方輸入代號新增自選</p>
                 </div>
             `;
             return;
         }
 
+        const latestRecsMap = new Map();
+        if (recs && recs.length > 0) {
+            recs.forEach(rec => {
+                if (!latestRecsMap.has(rec.stock_symbol)) {
+                    latestRecsMap.set(rec.stock_symbol, rec);
+                }
+            });
+        }
+
+        const watchlistCardsData = await Promise.all(pinnedStocks.map(async symbol => {
+            if (latestRecsMap.has(symbol)) {
+                return latestRecsMap.get(symbol);
+            } else {
+                if (window._isStatic) {
+                    const custom = (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]);
+                    if (custom) {
+                        return {
+                            id: `custom-${symbol}`,
+                            stock_symbol: symbol,
+                            stock_name: custom.name,
+                            market: custom.market,
+                            sentiment: 'neutral',
+                            price_at_mention: custom.history && custom.history.length > 0 ? custom.history[0].current_price : custom.latest_price,
+                            latest_price: custom.latest_price,
+                            latest_change_pct: custom.change_pct,
+                            is_custom: true,
+                            gooaye_opinion: '自選追蹤標的'
+                        };
+                    }
+                } else {
+                    try {
+                        const res = await fetch(`/api/performance-by-symbol/${symbol}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            const custom = data.recommendation;
+                            return {
+                                id: `custom-${symbol}`,
+                                stock_symbol: symbol,
+                                stock_name: custom.stock_name,
+                                market: custom.market,
+                                sentiment: 'neutral',
+                                price_at_mention: custom.price_at_mention,
+                                latest_price: custom.latest_price,
+                                latest_change_pct: custom.latest_change_pct || 0,
+                                is_custom: true,
+                                gooaye_opinion: '自選追蹤標的'
+                            };
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch custom watchlist stock:', symbol, err);
+                    }
+                }
+                
+                return {
+                    id: `custom-${symbol}`,
+                    stock_symbol: symbol,
+                    stock_name: symbol,
+                    market: 'TW',
+                    sentiment: 'neutral',
+                    price_at_mention: 0,
+                    latest_price: 0,
+                    latest_change_pct: 0,
+                    is_custom: true,
+                    gooaye_opinion: '未獲取到此自選股數據'
+                };
+            }
+        }));
+
         container.innerHTML = `
             <div class="stock-cards">
-                ${pinnedRecs.map(rec => renderStockCard(rec)).join('')}
+                ${watchlistCardsData.map(rec => renderStockCard(rec)).join('')}
             </div>
         `;
         
@@ -542,14 +642,34 @@ async function syncWatchlistToGitHub() {
 }
 
 // --- Performance Chart Modal ---
-async function showPerformanceChart(recId, name) {
+async function showPerformanceChart(symbol, name) {
     try {
         let data;
         if (window._isStatic) {
-            data = window._staticData.performance[recId] || {};
+            if (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]) {
+                const custom = window._staticData.watchlist_data[symbol];
+                data = {
+                    recommendation: {
+                        stock_symbol: symbol,
+                        stock_name: custom.name,
+                        market: custom.market,
+                        price_at_mention: custom.history && custom.history.length > 0 ? custom.history[0].current_price : custom.latest_price,
+                        latest_price: custom.latest_price,
+                        is_custom: true
+                    },
+                    all_mentions: [],
+                    history: custom.history || []
+                };
+            } else {
+                data = window._staticData.performance[symbol] || {};
+            }
         } else {
-            const res = await fetch(`/api/performance/${recId}`);
-            data = await res.json();
+            const res = await fetch(`/api/performance-by-symbol/${symbol}`);
+            if (res.ok) {
+                data = await res.json();
+            } else {
+                throw new Error('API request failed');
+            }
         }
 
         const modal = document.getElementById('chartModal');
@@ -560,11 +680,17 @@ async function showPerformanceChart(recId, name) {
         modal.style.display = 'flex';
 
         const rec = data.recommendation || {};
+        const allMentions = data.all_mentions || [];
         const history = data.history || [];
         
-        const mentionDate = rec.video_date ? rec.video_date.split('T')[0] : null;
+        const mentionMap = {};
+        allMentions.forEach(m => {
+            if (m.video_date) {
+                const dStr = m.video_date.split('T')[0];
+                mentionMap[dStr] = m;
+            }
+        });
 
-        // Render chart
         const ctx = document.getElementById('performanceChart').getContext('2d');
 
         if (currentChart) {
@@ -574,7 +700,6 @@ async function showPerformanceChart(recId, name) {
         if (history.length > 0) {
             const labels = history.map(h => h.tracked_date);
             const prices = history.map(h => h.current_price);
-            const changes = history.map(h => h.price_change_pct);
             
             const pointRadii = [];
             const pointHoverRadii = [];
@@ -582,11 +707,22 @@ async function showPerformanceChart(recId, name) {
             const pointStyles = [];
             
             history.forEach(h => {
-                if (mentionDate && h.tracked_date === mentionDate) {
+                const dStr = h.tracked_date;
+                if (mentionMap[dStr]) {
+                    const m = mentionMap[dStr];
                     pointRadii.push(8);
                     pointHoverRadii.push(10);
-                    pointBackgroundColors.push('#f59e0b'); // Gold color for recommendation day
-                    pointStyles.push('rectRot'); // Diamond point style
+                    
+                    if (m.sentiment === 'bullish') {
+                        pointBackgroundColors.push('#10b981'); // Green
+                        pointStyles.push('triangle');
+                    } else if (m.sentiment === 'bearish') {
+                        pointBackgroundColors.push('#ef4444'); // Red
+                        pointStyles.push('rectRot');
+                    } else {
+                        pointBackgroundColors.push('#6b7280'); // Gray
+                        pointStyles.push('circle');
+                    }
                 } else {
                     pointRadii.push(3);
                     pointHoverRadii.push(5);
@@ -627,14 +763,18 @@ async function showPerformanceChart(recId, name) {
                                     const idx = context.dataIndex;
                                     const date = labels[idx];
                                     let label = ` 股價: ${formatPrice(prices[idx])}`;
-                                    if (mentionDate && date === mentionDate) {
-                                        label += ' (★ 推薦日)';
+                                    if (mentionMap[date]) {
+                                        const m = mentionMap[date];
+                                        const sentimentLabel = { bullish: '看多推薦', bearish: '看空/避開', neutral: '中性提及' }[m.sentiment] || '提及';
+                                        label += ` (★ ${sentimentLabel})`;
                                     }
                                     return label;
                                 },
                                 afterLabel: function(context) {
                                     const idx = context.dataIndex;
-                                    return `漲跌: ${formatChange(changes[idx])}`;
+                                    const firstPrice = rec.price_at_mention || prices[0];
+                                    const change = (((prices[idx] - firstPrice) / firstPrice) * 100).toFixed(2);
+                                    return `累計變動: ${formatChange(change)}`;
                                 }
                             }
                         }
@@ -653,24 +793,56 @@ async function showPerformanceChart(recId, name) {
             });
         }
 
-        // Detail info
+        let timelineHTML = '';
+        if (rec.is_custom) {
+            timelineHTML = `
+                <div style="background:rgba(255,255,255,0.02); border:1px dashed rgba(255,255,255,0.1); padding:16px; border-radius:8px; margin-top:16px; text-align:center;">
+                    <p style="margin:0; color:var(--text-muted)">📌 此標的為自選追蹤股，非股癌 Podcast 提及推薦標的。</p>
+                </div>
+            `;
+        } else if (allMentions.length > 0) {
+            timelineHTML = `
+                <h3 style="font-size:15px; font-weight:600; margin:24px 0 12px; color:var(--accent-primary-light);">🎙️ 歷史推薦時間軸 (共被提及 ${allMentions.length} 次)</h3>
+                <div class="mentions-timeline" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 8px;">
+                    ${allMentions.map(m => {
+                        const date = m.video_date ? m.video_date.split('T')[0] : '';
+                        const sentimentLabel = { bullish: '看多', bearish: '看空', neutral: '中性' }[m.sentiment] || '中性';
+                        return `
+                            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:12px 16px; border-radius:8px; text-align: left;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <strong style="font-size:14px; color:var(--text-primary)">${escHtml(m.video_title)}</strong>
+                                    <span class="sentiment-badge ${m.sentiment}" style="font-size:11px">${sentimentLabel}</span>
+                                </div>
+                                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                                    <div>📅 提及日期: ${date}</div>
+                                    <div>💵 當時股價: ${formatPrice(m.price_at_mention)}</div>
+                                    <div>🎯 目標價: ${formatPrice(m.target_price)}</div>
+                                </div>
+                                ${m.gooaye_opinion ? `<p style="margin:4px 0 0; font-size:13px; color:var(--text-muted)"><strong style="color:var(--text-secondary)">主委觀點：</strong>${escHtml(m.gooaye_opinion)}</p>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
         detailEl.innerHTML = `
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px">
                 <div class="price-item">
-                    <div class="price-label">推薦時股價</div>
+                    <div class="price-label">${rec.is_custom ? '加入價格' : '首次提及價格'}</div>
                     <div class="price-value">${formatPrice(rec.price_at_mention)}</div>
                 </div>
                 <div class="price-item">
-                    <div class="price-label">目標價</div>
-                    <div class="price-value green">${formatPrice(rec.target_price)}</div>
+                    <div class="price-label">最新價格</div>
+                    <div class="price-value">${formatPrice(rec.latest_price)}</div>
                 </div>
                 <div class="price-item">
-                    <div class="price-label">停損價</div>
-                    <div class="price-value red">${formatPrice(rec.stop_loss)}</div>
+                    <div class="price-label">績效</div>
+                    <div class="price-value ${getChangeClass(rec.latest_change_pct)}">${formatChange(rec.latest_change_pct)}</div>
                 </div>
             </div>
-            ${mentionDate ? `<div style="font-size:12px;color:var(--text-muted);margin-top:10px;background:rgba(245,158,11,0.05);border:1px dashed rgba(245,158,11,0.2);padding:6px 10px;border-radius:4px">💡 註：圖表中的黃色菱形（◆）標記為 ${mentionDate} 影片推薦日</div>` : ''}
-            ${rec.gooaye_opinion ? `<p style="margin-top:16px"><strong>股癌觀點：</strong>${escHtml(rec.gooaye_opinion)}</p>` : ''}
+            ${!rec.is_custom ? `<div style="font-size:12px;color:var(--text-muted);margin-top:10px;background:rgba(99,102,241,0.05);border:1px dashed rgba(99,102,241,0.2);padding:6px 10px;border-radius:4px; text-align: left;">💡 註：走勢圖上方的三角形（▲）或菱形（◆）標記為節目推薦或提及日</div>` : ''}
+            ${timelineHTML}
         `;
     } catch (err) {
         console.error('Chart load error:', err);
@@ -1006,4 +1178,35 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.classList.remove('show');
     }, 4000);
+}
+
+async function addCustomStock() {
+    const input = document.getElementById('customStockSymbol');
+    if (!input) return;
+    const symbol = input.value.trim().toUpperCase();
+    if (!symbol) {
+        showToast('請輸入股票代號', 'error');
+        return;
+    }
+    
+    if (pinnedStocks.includes(symbol)) {
+        showToast('該股票已在您的追蹤清單中', 'error');
+        return;
+    }
+    
+    showToast(`正在新增自選股 ${symbol}...`, 'info');
+    
+    pinnedStocks.push(symbol);
+    localStorage.setItem('gooaye_watchlist', JSON.stringify(pinnedStocks));
+    
+    input.value = '';
+    
+    await loadWatchlist();
+    loadTracking();
+    
+    if (githubApiToken) {
+        await syncWatchlistToGitHub();
+    }
+    
+    showToast(`成功新增自選股 ${symbol}！`, 'success');
 }
