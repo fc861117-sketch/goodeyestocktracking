@@ -561,6 +561,8 @@ async function showPerformanceChart(recId, name) {
 
         const rec = data.recommendation || {};
         const history = data.history || [];
+        
+        const mentionDate = rec.video_date ? rec.video_date.split('T')[0] : null;
 
         // Render chart
         const ctx = document.getElementById('performanceChart').getContext('2d');
@@ -573,6 +575,25 @@ async function showPerformanceChart(recId, name) {
             const labels = history.map(h => h.tracked_date);
             const prices = history.map(h => h.current_price);
             const changes = history.map(h => h.price_change_pct);
+            
+            const pointRadii = [];
+            const pointHoverRadii = [];
+            const pointBackgroundColors = [];
+            const pointStyles = [];
+            
+            history.forEach(h => {
+                if (mentionDate && h.tracked_date === mentionDate) {
+                    pointRadii.push(8);
+                    pointHoverRadii.push(10);
+                    pointBackgroundColors.push('#f59e0b'); // Gold color for recommendation day
+                    pointStyles.push('rectRot'); // Diamond point style
+                } else {
+                    pointRadii.push(3);
+                    pointHoverRadii.push(5);
+                    pointBackgroundColors.push('#6366f1');
+                    pointStyles.push('circle');
+                }
+            });
 
             currentChart = new Chart(ctx, {
                 type: 'line',
@@ -586,8 +607,10 @@ async function showPerformanceChart(recId, name) {
                             backgroundColor: 'rgba(99, 102, 241, 0.1)',
                             fill: true,
                             tension: 0.4,
-                            pointRadius: 4,
-                            pointHoverRadius: 6,
+                            pointRadius: pointRadii,
+                            pointHoverRadius: pointHoverRadii,
+                            pointBackgroundColor: pointBackgroundColors,
+                            pointStyle: pointStyles,
                             borderWidth: 2,
                         },
                     ],
@@ -600,6 +623,15 @@ async function showPerformanceChart(recId, name) {
                         },
                         tooltip: {
                             callbacks: {
+                                label: function(context) {
+                                    const idx = context.dataIndex;
+                                    const date = labels[idx];
+                                    let label = ` 股價: ${formatPrice(prices[idx])}`;
+                                    if (mentionDate && date === mentionDate) {
+                                        label += ' (★ 推薦日)';
+                                    }
+                                    return label;
+                                },
                                 afterLabel: function(context) {
                                     const idx = context.dataIndex;
                                     return `漲跌: ${formatChange(changes[idx])}`;
@@ -637,6 +669,7 @@ async function showPerformanceChart(recId, name) {
                     <div class="price-value red">${formatPrice(rec.stop_loss)}</div>
                 </div>
             </div>
+            ${mentionDate ? `<div style="font-size:12px;color:var(--text-muted);margin-top:10px;background:rgba(245,158,11,0.05);border:1px dashed rgba(245,158,11,0.2);padding:6px 10px;border-radius:4px">💡 註：圖表中的黃色菱形（◆）標記為 ${mentionDate} 影片推薦日</div>` : ''}
             ${rec.gooaye_opinion ? `<p style="margin-top:16px"><strong>股癌觀點：</strong>${escHtml(rec.gooaye_opinion)}</p>` : ''}
         `;
     } catch (err) {
