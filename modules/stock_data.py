@@ -235,3 +235,36 @@ def get_current_price(symbol, market="TW"):
             return _get_twstock_price(symbol)
 
     return None
+
+
+def get_historical_prices(symbol, market="TW", period="3mo"):
+    """
+    Get historical closing prices for a stock as a list of (date_str, price) tuples.
+    """
+    import yfinance as yf
+    
+    if market == "TW":
+        ticker_symbols = []
+        if '.' in symbol:
+            ticker_symbols.append(symbol)
+        else:
+            ticker_symbols.append(f"{symbol}.TW")
+            ticker_symbols.append(f"{symbol}.TWO")
+    else:
+        ticker_symbols = [symbol]
+        
+    for ticker_symbol in ticker_symbols:
+        try:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(period=period)
+            if not hist.empty:
+                prices = []
+                for index, row in hist.iterrows():
+                    date_str = index.strftime('%Y-%m-%d')
+                    price = round(float(row['Close']), 2)
+                    prices.append((date_str, price))
+                return prices
+        except Exception as e:
+            logger.warning("Failed to get historical prices for %s: %s", ticker_symbol, e)
+            
+    return []
