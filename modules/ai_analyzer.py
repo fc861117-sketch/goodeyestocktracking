@@ -22,10 +22,15 @@ def _get_client(api_key):
     return genai.Client(api_key=api_key)
 
 
+COOLDOWNS = {}
+COOLDOWN_DURATION = 300  # 5 minutes
 FALLBACK_MODELS = [
+    "gemini-2.5-pro",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
+    "gemini-flash-latest",
 ]
 
 
@@ -33,36 +38,50 @@ def _call_gemini(client, prompt, retries=MAX_RETRIES):
     """Call Gemini API with model fallback and exponential backoff."""
     last_error = None
 
-    for model_name in FALLBACK_MODELS:
-        for attempt in range(retries):
-            try:
-                logger.info("Calling Gemini model: %s (attempt %d)", model_name, attempt + 1)
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                return response.text
-            except Exception as e:
-                last_error = e
-                error_str = str(e)
-                if '429' in error_str or 'quota' in error_str.lower():
-                    delay = BASE_DELAY * (2 ** attempt)
-                    logger.warning(
-                        "Rate limited on %s (attempt %d/%d). Waiting %ds...",
-                        model_name, attempt + 1, retries, delay
-                    )
-                    time.sleep(delay)
-                elif '503' in error_str or 'UNAVAILABLE' in error_str:
-                    logger.warning("Model %s unavailable, trying next model...", model_name)
-                    break  # Skip to next model
-                else:
-                    logger.error("Gemini API error on %s: %s", model_name, e)
-                    if attempt < retries - 1:
-                        time.sleep(5)
-                    else:
-                        break  # Try next model
+    for outer_attempt in range(5):
+        now = time.time()
+        for model_name in FALLBACK_MODELS:
+            # Check if model is on cooldown
+            if model_name in COOLDOWNS and COOLDOWNS[model_name] > now:
+                logger.info("Skipping model %s (on cooldown for %d more seconds)", 
+                            model_name, int(COOLDOWNS[model_name] - now))
+                continue
 
-    raise Exception(f"All Gemini models failed. Last error: {last_error}")
+            for attempt in range(retries):
+                try:
+                    logger.info("Calling Gemini model: %s (attempt %d)", model_name, attempt + 1)
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                    )
+                    return response.text
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e)
+                    if '429' in error_str or 'quota' in error_str.lower():
+                        # Set cooldown for this model
+                        COOLDOWNS[model_name] = time.time() + COOLDOWN_DURATION
+                        delay = BASE_DELAY * (2 ** attempt)
+                        logger.warning(
+                            "Rate limited on %s (attempt %d/%d). Cooldown activated. Waiting %ds...",
+                            model_name, attempt + 1, retries, delay
+                        )
+                        time.sleep(delay)
+                    elif '503' in error_str or 'UNAVAILABLE' in error_str:
+                        logger.warning("Model %s unavailable, trying next model...", model_name)
+                        break  # Skip to next model
+                    else:
+                        logger.error("Gemini API error on %s: %s", model_name, e)
+                        if attempt < retries - 1:
+                            time.sleep(5)
+                        else:
+                            break  # Try next model
+
+        # If we reach here, all models in the list failed
+        logger.warning("All Gemini models are rate-limited or failed. Waiting 60s for quota reset (outer attempt %d/5)...", outer_attempt + 1)
+        time.sleep(60)
+
+    raise Exception(f"All Gemini models failed after outer retries. Last error: {last_error}")
 
 
 def _extract_json(text):
