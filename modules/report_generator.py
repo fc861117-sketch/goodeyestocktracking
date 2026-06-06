@@ -108,15 +108,38 @@ def generate_report(video_info, transcript, api_key):
             analysis_detail=advice.get('analysis_detail', ''),
         )
 
-        # Save initial performance tracking entry
+        # Save historical performance tracking entries (past 3 months)
         if current_price:
-            from datetime import date
-            db.save_performance(
-                recommendation_id=rec_id,
-                tracked_date=date.today().isoformat(),
-                current_price=current_price,
-                price_change_pct=0.0
-            )
+            try:
+                hist_prices = stock_data.get_historical_prices(symbol, market, period="3mo")
+                if hist_prices:
+                    logger.info("Saving %d historical price points for %s...", len(hist_prices), symbol)
+                    for hist_date, hist_price in hist_prices:
+                        change_pct = round((hist_price - current_price) / current_price * 100, 2) if current_price > 0 else 0.0
+                        db.save_performance(
+                            recommendation_id=rec_id,
+                            tracked_date=hist_date,
+                            current_price=hist_price,
+                            price_change_pct=change_pct
+                        )
+                else:
+                    # Fallback to just today's entry
+                    from datetime import date
+                    db.save_performance(
+                        recommendation_id=rec_id,
+                        tracked_date=date.today().isoformat(),
+                        current_price=current_price,
+                        price_change_pct=0.0
+                    )
+            except Exception as e:
+                logger.error("Failed to save historical performance for %s: %s", symbol, e)
+                from datetime import date
+                db.save_performance(
+                    recommendation_id=rec_id,
+                    tracked_date=date.today().isoformat(),
+                    current_price=current_price,
+                    price_change_pct=0.0
+                )
 
         recommendations.append({
             'id': rec_id,
