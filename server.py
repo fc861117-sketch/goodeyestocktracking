@@ -119,6 +119,72 @@ def create_app(config=None):
             'history': history,
         })
 
+    @app.route('/api/performance-by-symbol/<symbol>')
+    def api_performance_by_symbol(symbol):
+        """Get consolidated performance and all recommendation records for a symbol."""
+        try:
+            # Find all recommendations for this symbol
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT r.*, v.published_at as video_date, v.title as video_title,
+                       pt.current_price as latest_price, pt.price_change_pct as latest_change_pct
+                FROM recommendations r
+                JOIN videos v ON r.video_id = v.video_id
+                LEFT JOIN performance_tracking pt ON pt.recommendation_id = r.id
+                    AND pt.tracked_date = (
+                        SELECT MAX(tracked_date)
+                        FROM performance_tracking
+                        WHERE recommendation_id = r.id
+                    )
+                WHERE r.stock_symbol = ?
+                ORDER BY r.id DESC
+            ''', (symbol,))
+            recs = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            
+            if recs:
+                latest_rec = recs[0]
+                history = db.get_performance_history(latest_rec['id'])
+                return jsonify({
+                    'recommendation': latest_rec,
+                    'all_mentions': recs,
+                    'history': history
+                })
+            else:
+                # Check if it's a custom stock
+                clean_sym = symbol.strip()
+                is_tw = any(c.isdigit() for c in clean_sym) or clean_sym.endswith('.TW') or clean_sym.endswith('.TWO')
+                market = 'TW' if is_tw else 'US'
+                from modules import stock_data
+                stock_info = stock_data.get_stock_data(clean_sym, market)
+                hist_prices = stock_data.get_historical_prices(clean_sym, market, period="3mo")
+                if stock_info and not stock_info.get('error'):
+                    price_at_mention = hist_prices[0][1] if hist_prices else stock_info['current_price']
+                    latest_price = stock_info['current_price']
+                    latest_change_pct = 0.0
+                    if price_at_mention > 0:
+                        latest_change_pct = ((latest_price - price_at_mention) / price_at_mention) * 100
+                    custom_rec = {
+                        'stock_symbol': clean_sym,
+                        'stock_name': stock_info['fundamentals'].get('company_name', clean_sym),
+                        'market': market,
+                        'price_at_mention': price_at_mention,
+                        'latest_price': latest_price,
+                        'latest_change_pct': latest_change_pct,
+                        'is_custom': True
+                    }
+                    custom_history = [{'tracked_date': h[0], 'current_price': h[1], 'price_change_pct': 0.0} for h in hist_prices]
+                    return jsonify({
+                        'recommendation': custom_rec,
+                        'all_mentions': [],
+                        'history': custom_history
+                    })
+                return jsonify({'error': 'Stock not found'}), 404
+        except Exception as e:
+            logger.error("Error in performance-by-symbol for %s: %s", symbol, e)
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/update-prices', methods=['POST'])
     def api_update_prices():
         """Trigger manual price update for all tracked stocks."""
