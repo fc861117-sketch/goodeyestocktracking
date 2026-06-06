@@ -125,10 +125,14 @@
 
         <!-- Watchlist Tab -->
         <section class="tab-content" id="tab-watchlist">
-            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
                 <div>
                     <h2>📌 我的追蹤 (Watchlist)</h2>
                     <p class="section-desc">您已釘選的個股 <span id="syncStatusBadge" class="sentiment-badge neutral" style="margin-left:8px;font-size:10px">本機模式</span></p>
+                </div>
+                <div class="custom-stock-add" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="customStockSymbol" placeholder="輸入代號(如 2317 或 TSLA)" style="padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); font-size: 14px; width: 220px;">
+                    <button class="btn btn-primary" onclick="addCustomStock()" style="padding: 8px 16px; font-size: 14px;">＋ 新增自選</button>
                 </div>
             </div>
             <div id="watchlistTable" class="tracking-container">
