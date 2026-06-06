@@ -435,15 +435,20 @@ async function loadWatchlist() {
                 if (window._isStatic) {
                     const custom = (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]);
                     if (custom) {
+                        const priceAtMention = custom.history && custom.history.length > 0 ? custom.history[0].current_price : custom.latest_price;
+                        let accumChange = 0;
+                        if (priceAtMention > 0) {
+                            accumChange = ((custom.latest_price - priceAtMention) / priceAtMention) * 100;
+                        }
                         return {
                             id: `custom-${symbol}`,
                             stock_symbol: symbol,
                             stock_name: custom.name,
                             market: custom.market,
                             sentiment: 'neutral',
-                            price_at_mention: custom.history && custom.history.length > 0 ? custom.history[0].current_price : custom.latest_price,
+                            price_at_mention: priceAtMention,
                             latest_price: custom.latest_price,
-                            latest_change_pct: custom.change_pct,
+                            latest_change_pct: accumChange,
                             is_custom: true,
                             gooaye_opinion: '自選追蹤標的'
                         };
