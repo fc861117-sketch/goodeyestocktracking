@@ -91,11 +91,28 @@ async function loadSummary() {
 
         const bestEl = document.getElementById('bestPerformer');
         if (data.best_performer) {
+            const bestName = data.best_performer.name || data.best_performer.symbol;
+            const bestSymbol = data.best_performer.symbol || bestName;
+            bestEl.classList.add('clickable-value');
+            bestEl.setAttribute('role', 'button');
+            bestEl.setAttribute('tabindex', '0');
+            bestEl.onclick = () => showPerformanceChart(bestSymbol, bestName);
+            bestEl.onkeydown = (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    showPerformanceChart(bestSymbol, bestName);
+                }
+            };
             bestEl.innerHTML = `
-                <span style="font-size:16px">${data.best_performer.name}</span><br>
+                <span style="font-size:16px">${escHtml(bestName)}</span><br>
                 <span style="font-size:14px;color:var(--green)">+${data.best_performer.change}%</span>
             `;
         } else {
+            bestEl.classList.remove('clickable-value');
+            bestEl.removeAttribute('role');
+            bestEl.removeAttribute('tabindex');
+            bestEl.onclick = null;
+            bestEl.onkeydown = null;
             bestEl.textContent = '-';
         }
 
@@ -184,7 +201,7 @@ function renderStockCard(rec) {
     const buyPriceHTML = rec.is_custom ? '-' : formatPrice(rec.buy_price);
 
     return `
-        <div class="card stock-card ${sentiment}" onclick="toggleStockDetail('${cardId}')">
+        <div class="card stock-card ${sentiment}" onclick="showPerformanceChart('${escAttr(rec.stock_symbol)}', '${escAttr(rec.stock_name || rec.stock_symbol)}')">
             <div class="stock-card-header">
                 <div>
                     <span class="stock-name">${escHtml(rec.stock_name || rec.stock_symbol)}</span>
@@ -252,6 +269,7 @@ function renderStockCard(rec) {
                 ` : ''}
                 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); toggleStockDetail('${cardId}')">展開摘要</button>
                     <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); showPerformanceChart('${escAttr(rec.stock_symbol)}', '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢圖</button>
                     <button class="btn btn-sm btn-ghost red" onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">❌ 取消追蹤</button>
                 </div>
@@ -508,10 +526,12 @@ async function loadWatchlist() {
 function openSettingsModal() {
     document.getElementById('githubTokenInput').value = githubApiToken;
     document.getElementById('settingsModal').style.display = 'flex';
+    document.body.classList.add('modal-open');
 }
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').style.display = 'none';
+    document.body.classList.remove('modal-open');
 }
 
 function saveSettings() {
@@ -649,6 +669,7 @@ async function syncWatchlistToGitHub() {
 // --- Performance Chart Modal ---
 async function showPerformanceChart(symbol, name) {
     try {
+        symbol = normalizeSymbol(symbol);
         let data;
         if (window._isStatic) {
             if (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]) {
@@ -665,11 +686,21 @@ async function showPerformanceChart(symbol, name) {
                     all_mentions: [],
                     history: custom.history || []
                 };
+            } else if (window._staticData.performance && window._staticData.performance[symbol]) {
+                data = window._staticData.performance[symbol];
             } else {
-                data = window._staticData.performance[symbol] || {};
+                const rec = findRecommendationBySymbol(symbol);
+                if (!rec) {
+                    throw new Error(`No stock data for ${symbol}`);
+                }
+                data = {
+                    recommendation: rec,
+                    all_mentions: [rec],
+                    history: rec.performance_history || []
+                };
             }
         } else {
-            const res = await fetch(`/api/performance-by-symbol/${symbol}`);
+            const res = await fetch(`/api/performance-by-symbol/${encodeURIComponent(symbol)}`);
             if (res.ok) {
                 data = await res.json();
             } else {
@@ -683,6 +714,7 @@ async function showPerformanceChart(symbol, name) {
 
         titleEl.textContent = `📈 ${name} 績效走勢`;
         modal.style.display = 'flex';
+        document.body.classList.add('modal-open');
 
         const rec = data.recommendation || {};
         const allMentions = data.all_mentions || [];
@@ -796,6 +828,13 @@ async function showPerformanceChart(symbol, name) {
                     },
                 },
             });
+        } else {
+            detailEl.innerHTML = `
+                <div class="empty-state" style="padding:32px 12px">
+                    <h3>暫無走勢資料</h3>
+                    <p>${escHtml(symbol)} 目前沒有可用的歷史價格，仍可查看下方標的摘要。</p>
+                </div>
+            `;
         }
 
         let timelineHTML = '';
@@ -855,8 +894,18 @@ async function showPerformanceChart(symbol, name) {
     }
 }
 
+function normalizeSymbol(symbol) {
+    return String(symbol || '').trim().toUpperCase();
+}
+
+function findRecommendationBySymbol(symbol) {
+    const recs = (window._staticData && window._staticData.recommendations) || [];
+    return recs.find(rec => normalizeSymbol(rec.stock_symbol) === symbol) || null;
+}
+
 function closeChartModal() {
     document.getElementById('chartModal').style.display = 'none';
+    document.body.classList.remove('modal-open');
     if (currentChart) {
         currentChart.destroy();
         currentChart = null;
