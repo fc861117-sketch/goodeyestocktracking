@@ -843,10 +843,10 @@ body::before {
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px);
-    z-index: 200;
+    z-index: 2147483000;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -860,7 +860,7 @@ body::before {
     border-radius: var(--radius-xl);
     width: 90%;
     max-width: 700px;
-    max-height: 85vh;
+    max-height: min(85vh, calc(100dvh - 32px));
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
     display: flex;
@@ -1029,16 +1029,16 @@ body::before {
     .modal {
         width: 100%;
         margin: 0;
-        height: calc(100dvh - 16px);
-        max-height: calc(100dvh - 16px);
+        height: calc(100dvh - 24px);
+        max-height: calc(100dvh - 24px);
         border-radius: 0;
     }
     .modal-overlay {
         align-items: flex-start;
         padding: 8px;
-        padding-top: max(8px, env(safe-area-inset-top));
+        padding-top: max(12px, env(safe-area-inset-top));
         padding-bottom: max(8px, env(safe-area-inset-bottom));
-        z-index: 1000;
+        z-index: 2147483000;
     }
     .modal-header {
         padding: 14px 16px;

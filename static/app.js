@@ -18,6 +18,8 @@ const SECTOR_CHART_COLORS = [
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    ensureModalsAtBodyRoot();
+
     // Detect static mode
     const isStatic = window.location.protocol === 'file:' || window.location.hostname.includes('github.io');
     window._isStatic = isStatic;
@@ -47,6 +49,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+function ensureModalsAtBodyRoot() {
+    ['chartModal', 'settingsModal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal && modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+    });
+}
 
 async function loadDashboard() {
     try {
@@ -532,6 +543,7 @@ async function loadWatchlist() {
 
 // --- GitHub Sync Settings ---
 function openSettingsModal() {
+    ensureModalsAtBodyRoot();
     document.getElementById('githubTokenInput').value = githubApiToken;
     document.getElementById('settingsModal').style.display = 'flex';
     document.body.classList.add('modal-open');
@@ -677,6 +689,7 @@ async function syncWatchlistToGitHub() {
 // --- Performance Chart Modal ---
 async function showPerformanceChart(symbol, name) {
     try {
+        ensureModalsAtBodyRoot();
         symbol = normalizeSymbol(symbol);
         const modalEl = document.getElementById('chartModal');
         const titleElInitial = document.getElementById('chartTitle');
