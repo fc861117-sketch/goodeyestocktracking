@@ -10,6 +10,11 @@ let sectorTrendChart = null;
 let pinnedStocks = JSON.parse(localStorage.getItem('gooaye_watchlist') || '[]');
 let githubApiToken = localStorage.getItem('gooaye_github_token') || '';
 let watchlistSha = null;
+let recommendationIndex = null;
+const SECTOR_CHART_COLORS = [
+    '#ff4d4d', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7',
+    '#06b6d4', '#f97316', '#e11d48', '#84cc16', '#facc15',
+];
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -673,6 +678,21 @@ async function syncWatchlistToGitHub() {
 async function showPerformanceChart(symbol, name) {
     try {
         symbol = normalizeSymbol(symbol);
+        const modalEl = document.getElementById('chartModal');
+        const titleElInitial = document.getElementById('chartTitle');
+        const detailElInitial = document.getElementById('modalDetail');
+        const chartCanvas = document.getElementById('performanceChart');
+        titleElInitial.textContent = `📈 ${name} 績效走勢`;
+        detailElInitial.innerHTML = '<div class="chart-loading">載入標的資料中...</div>';
+        modalEl.style.display = 'flex';
+        document.body.classList.add('modal-open');
+        if (currentChart) {
+            currentChart.destroy();
+            currentChart = null;
+        }
+        if (chartCanvas) {
+            chartCanvas.style.display = 'none';
+        }
         let data;
         if (window._isStatic) {
             if (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]) {
@@ -738,6 +758,7 @@ async function showPerformanceChart(symbol, name) {
         }
 
         if (history.length > 0) {
+            document.getElementById('performanceChart').style.display = 'block';
             const labels = history.map(h => h.tracked_date);
             const prices = history.map(h => h.current_price);
             
@@ -793,6 +814,7 @@ async function showPerformanceChart(symbol, name) {
                 },
                 options: {
                     responsive: true,
+                    animation: false,
                     plugins: {
                         legend: {
                             labels: { color: '#94a3b8', font: { family: 'Inter' } }
@@ -902,8 +924,17 @@ function normalizeSymbol(symbol) {
 }
 
 function findRecommendationBySymbol(symbol) {
-    const recs = (window._staticData && window._staticData.recommendations) || [];
-    return recs.find(rec => normalizeSymbol(rec.stock_symbol) === symbol) || null;
+    if (!recommendationIndex) {
+        recommendationIndex = new Map();
+        const recs = (window._staticData && window._staticData.recommendations) || [];
+        recs.forEach(rec => {
+            const recSymbol = normalizeSymbol(rec.stock_symbol);
+            if (recSymbol && !recommendationIndex.has(recSymbol)) {
+                recommendationIndex.set(recSymbol, rec);
+            }
+        });
+    }
+    return recommendationIndex.get(symbol) || null;
 }
 
 function closeChartModal() {
@@ -1156,7 +1187,7 @@ async function loadSectorCharts() {
     const recs = await getSectorChartRecommendations();
     ensureSectorSelectionContainer();
 
-    const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#06b6d4', '#84cc16', '#d946ef'];
+    const colors = SECTOR_CHART_COLORS;
     const sectors = data.sectors || [];
     if (sectors.length > 0) {
         const sectorCtx = document.getElementById('sectorChart').getContext('2d');
@@ -1174,6 +1205,7 @@ async function loadSectorCharts() {
             },
             options: {
                 responsive: true,
+                animation: false,
                 onClick: (event, elements) => {
                     if (!elements.length) return;
                     renderChartSelection('sector', sectors[elements[0].index].sector, recs);
@@ -1207,6 +1239,7 @@ async function loadSectorCharts() {
             },
             options: {
                 responsive: true,
+                animation: false,
                 onClick: (event, elements) => {
                     if (!elements.length) return;
                     renderChartSelection('sentiment', sentiments[elements[0].index].sentiment, recs);
@@ -1248,6 +1281,7 @@ async function loadSectorCharts() {
             data: { labels: dates, datasets },
             options: {
                 responsive: true,
+                animation: false,
                 plugins: {
                     title: {
                         display: true,
