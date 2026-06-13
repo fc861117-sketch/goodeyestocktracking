@@ -159,7 +159,7 @@ def create_app(config=None):
                 from modules import stock_data
                 stock_info = stock_data.get_stock_data(clean_sym, market)
                 hist_prices = stock_data.get_historical_prices(clean_sym, market, period="3mo")
-                if stock_info and not stock_info.get('error') and stock_info.get('current_price') is not None:
+                if stock_info and not stock_info.get('error'):
                     price_at_mention = hist_prices[0][1] if hist_prices else stock_info['current_price']
                     latest_price = stock_info['current_price']
                     latest_change_pct = 0.0
