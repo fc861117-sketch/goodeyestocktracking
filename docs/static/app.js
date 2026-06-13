@@ -4,22 +4,12 @@
 
 // --- State ---
 let currentChart = null;
-let sectorChart = null;
-let sentimentChart = null;
-let sectorTrendChart = null;
 let pinnedStocks = JSON.parse(localStorage.getItem('gooaye_watchlist') || '[]');
 let githubApiToken = localStorage.getItem('gooaye_github_token') || '';
 let watchlistSha = null;
-let recommendationIndex = null;
-const SECTOR_CHART_COLORS = [
-    '#ff4d4d', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7',
-    '#06b6d4', '#f97316', '#e11d48', '#84cc16', '#facc15',
-];
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    ensureModalsAtBodyRoot();
-
     // Detect static mode
     const isStatic = window.location.protocol === 'file:' || window.location.hostname.includes('github.io');
     window._isStatic = isStatic;
@@ -49,15 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
-
-function ensureModalsAtBodyRoot() {
-    ['chartModal', 'settingsModal'].forEach(id => {
-        const modal = document.getElementById(id);
-        if (modal && modal.parentElement !== document.body) {
-            document.body.appendChild(modal);
-        }
-    });
-}
 
 async function loadDashboard() {
     try {
@@ -110,28 +91,11 @@ async function loadSummary() {
 
         const bestEl = document.getElementById('bestPerformer');
         if (data.best_performer) {
-            const bestName = data.best_performer.name || data.best_performer.symbol;
-            const bestSymbol = data.best_performer.symbol || bestName;
-            bestEl.classList.add('clickable-value');
-            bestEl.setAttribute('role', 'button');
-            bestEl.setAttribute('tabindex', '0');
-            bestEl.onclick = () => showPerformanceChart(bestSymbol, bestName);
-            bestEl.onkeydown = (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    showPerformanceChart(bestSymbol, bestName);
-                }
-            };
             bestEl.innerHTML = `
-                <span style="font-size:16px">${escHtml(bestName)}</span><br>
+                <span style="font-size:16px">${data.best_performer.name}</span><br>
                 <span style="font-size:14px;color:var(--green)">+${data.best_performer.change}%</span>
             `;
         } else {
-            bestEl.classList.remove('clickable-value');
-            bestEl.removeAttribute('role');
-            bestEl.removeAttribute('tabindex');
-            bestEl.onclick = null;
-            bestEl.onkeydown = null;
             bestEl.textContent = '-';
         }
 
@@ -220,7 +184,7 @@ function renderStockCard(rec) {
     const buyPriceHTML = rec.is_custom ? '-' : formatPrice(rec.buy_price);
 
     return `
-        <div class="card stock-card ${sentiment}" onclick="showPerformanceChart('${escAttr(rec.stock_symbol)}', '${escAttr(rec.stock_name || rec.stock_symbol)}')">
+        <div class="card stock-card ${sentiment}" onclick="toggleStockDetail('${cardId}')">
             <div class="stock-card-header">
                 <div>
                     <span class="stock-name">${escHtml(rec.stock_name || rec.stock_symbol)}</span>
@@ -288,7 +252,6 @@ function renderStockCard(rec) {
                 ` : ''}
                 
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
-                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); toggleStockDetail('${cardId}')">展開摘要</button>
                     <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); showPerformanceChart('${escAttr(rec.stock_symbol)}', '${escAttr(rec.stock_name || rec.stock_symbol)}')">📈 走勢圖</button>
                     <button class="btn btn-sm btn-ghost red" onclick="event.stopPropagation(); togglePinStatus('${escAttr(rec.stock_symbol)}')">❌ 取消追蹤</button>
                 </div>
@@ -543,15 +506,12 @@ async function loadWatchlist() {
 
 // --- GitHub Sync Settings ---
 function openSettingsModal() {
-    ensureModalsAtBodyRoot();
     document.getElementById('githubTokenInput').value = githubApiToken;
     document.getElementById('settingsModal').style.display = 'flex';
-    document.body.classList.add('modal-open');
 }
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').style.display = 'none';
-    document.body.classList.remove('modal-open');
 }
 
 function saveSettings() {
@@ -689,23 +649,6 @@ async function syncWatchlistToGitHub() {
 // --- Performance Chart Modal ---
 async function showPerformanceChart(symbol, name) {
     try {
-        ensureModalsAtBodyRoot();
-        symbol = normalizeSymbol(symbol);
-        const modalEl = document.getElementById('chartModal');
-        const titleElInitial = document.getElementById('chartTitle');
-        const detailElInitial = document.getElementById('modalDetail');
-        const chartCanvas = document.getElementById('performanceChart');
-        titleElInitial.textContent = `📈 ${name} 績效走勢`;
-        detailElInitial.innerHTML = '<div class="chart-loading">載入標的資料中...</div>';
-        modalEl.style.display = 'flex';
-        document.body.classList.add('modal-open');
-        if (currentChart) {
-            currentChart.destroy();
-            currentChart = null;
-        }
-        if (chartCanvas) {
-            chartCanvas.style.display = 'none';
-        }
         let data;
         if (window._isStatic) {
             if (window._staticData.watchlist_data && window._staticData.watchlist_data[symbol]) {
@@ -722,21 +665,11 @@ async function showPerformanceChart(symbol, name) {
                     all_mentions: [],
                     history: custom.history || []
                 };
-            } else if (window._staticData.performance && window._staticData.performance[symbol]) {
-                data = window._staticData.performance[symbol];
             } else {
-                const rec = findRecommendationBySymbol(symbol);
-                if (!rec) {
-                    throw new Error(`No stock data for ${symbol}`);
-                }
-                data = {
-                    recommendation: rec,
-                    all_mentions: [rec],
-                    history: rec.performance_history || []
-                };
+                data = window._staticData.performance[symbol] || {};
             }
         } else {
-            const res = await fetch(`/api/performance-by-symbol/${encodeURIComponent(symbol)}`);
+            const res = await fetch(`/api/performance-by-symbol/${symbol}`);
             if (res.ok) {
                 data = await res.json();
             } else {
@@ -750,7 +683,6 @@ async function showPerformanceChart(symbol, name) {
 
         titleEl.textContent = `📈 ${name} 績效走勢`;
         modal.style.display = 'flex';
-        document.body.classList.add('modal-open');
 
         const rec = data.recommendation || {};
         const allMentions = data.all_mentions || [];
@@ -771,7 +703,6 @@ async function showPerformanceChart(symbol, name) {
         }
 
         if (history.length > 0) {
-            document.getElementById('performanceChart').style.display = 'block';
             const labels = history.map(h => h.tracked_date);
             const prices = history.map(h => h.current_price);
             
@@ -827,7 +758,6 @@ async function showPerformanceChart(symbol, name) {
                 },
                 options: {
                     responsive: true,
-                    animation: false,
                     plugins: {
                         legend: {
                             labels: { color: '#94a3b8', font: { family: 'Inter' } }
@@ -866,13 +796,6 @@ async function showPerformanceChart(symbol, name) {
                     },
                 },
             });
-        } else {
-            detailEl.innerHTML = `
-                <div class="empty-state" style="padding:32px 12px">
-                    <h3>暫無走勢資料</h3>
-                    <p>${escHtml(symbol)} 目前沒有可用的歷史價格，仍可查看下方標的摘要。</p>
-                </div>
-            `;
         }
 
         let timelineHTML = '';
@@ -932,27 +855,8 @@ async function showPerformanceChart(symbol, name) {
     }
 }
 
-function normalizeSymbol(symbol) {
-    return String(symbol || '').trim().toUpperCase();
-}
-
-function findRecommendationBySymbol(symbol) {
-    if (!recommendationIndex) {
-        recommendationIndex = new Map();
-        const recs = (window._staticData && window._staticData.recommendations) || [];
-        recs.forEach(rec => {
-            const recSymbol = normalizeSymbol(rec.stock_symbol);
-            if (recSymbol && !recommendationIndex.has(recSymbol)) {
-                recommendationIndex.set(recSymbol, rec);
-            }
-        });
-    }
-    return recommendationIndex.get(symbol) || null;
-}
-
 function closeChartModal() {
     document.getElementById('chartModal').style.display = 'none';
-    document.body.classList.remove('modal-open');
     if (currentChart) {
         currentChart.destroy();
         currentChart = null;
@@ -1058,7 +962,7 @@ async function toggleHistoryDetail(elementId, videoId) {
 }
 
 // --- Sector Charts ---
-async function loadSectorChartsLegacy() {
+async function loadSectorCharts() {
     const data = window._dashboardData;
     if (!data) return;
 
@@ -1191,219 +1095,6 @@ async function loadSectorChartsLegacy() {
             }
         });
     }
-}
-
-async function loadSectorCharts() {
-    const data = window._dashboardData;
-    if (!data) return;
-
-    const recs = await getSectorChartRecommendations();
-    ensureSectorSelectionContainer();
-
-    const colors = SECTOR_CHART_COLORS;
-    const sectors = data.sectors || [];
-    if (sectors.length > 0) {
-        const sectorCtx = document.getElementById('sectorChart').getContext('2d');
-        if (sectorChart) sectorChart.destroy();
-        sectorChart = new Chart(sectorCtx, {
-            type: 'doughnut',
-            data: {
-                labels: sectors.map(s => s.sector),
-                datasets: [{
-                    data: sectors.map(s => s.count),
-                    backgroundColor: sectors.map((_, i) => colors[i % colors.length]),
-                    borderColor: 'transparent',
-                    borderWidth: 0,
-                }],
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                onClick: (event, elements) => {
-                    if (!elements.length) return;
-                    renderChartSelection('sector', sectors[elements[0].index].sector, recs);
-                },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 }, padding: 16 },
-                    },
-                },
-            },
-        });
-    }
-
-    const sentiments = data.sentiments || [];
-    if (sentiments.length > 0) {
-        const sentCtx = document.getElementById('sentimentChart').getContext('2d');
-        const sentColors = { bullish: '#10b981', bearish: '#ef4444', neutral: '#f59e0b' };
-        const sentLabels = { bullish: '看多', bearish: '看空', neutral: '中性' };
-        if (sentimentChart) sentimentChart.destroy();
-        sentimentChart = new Chart(sentCtx, {
-            type: 'doughnut',
-            data: {
-                labels: sentiments.map(s => sentLabels[s.sentiment] || s.sentiment),
-                datasets: [{
-                    data: sentiments.map(s => s.count),
-                    backgroundColor: sentiments.map(s => sentColors[s.sentiment] || '#64748b'),
-                    borderColor: 'transparent',
-                    borderWidth: 0,
-                }],
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                onClick: (event, elements) => {
-                    if (!elements.length) return;
-                    renderChartSelection('sentiment', sentiments[elements[0].index].sentiment, recs);
-                },
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#94a3b8', font: { family: 'Inter', size: 12 }, padding: 16 },
-                    },
-                },
-            },
-        });
-    }
-
-    const trendCtx = document.getElementById('sectorTrendChart');
-    const datedRecs = recs
-        .map(r => ({ ...r, chart_date: getRecommendationDate(r) }))
-        .filter(r => r.chart_date && r.sector);
-    if (trendCtx && datedRecs.length > 0) {
-        const dates = [...new Set(datedRecs.map(r => r.chart_date))].sort();
-        const sectorNames = [...new Set(datedRecs.map(r => r.sector))]
-            .map(sector => ({ sector, count: datedRecs.filter(r => r.sector === sector).length }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10)
-            .map(item => item.sector);
-
-        const datasets = sectorNames.map((sector, i) => ({
-            label: sector,
-            data: dates.map(date => datedRecs.filter(r => r.sector === sector && r.chart_date === date).length),
-            borderColor: colors[i % colors.length],
-            backgroundColor: colors[i % colors.length] + '33',
-            fill: true,
-            tension: 0.3,
-        }));
-
-        if (sectorTrendChart) sectorTrendChart.destroy();
-        sectorTrendChart = new Chart(trendCtx.getContext('2d'), {
-            type: 'line',
-            data: { labels: dates, datasets },
-            options: {
-                responsive: true,
-                animation: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: '板塊熱度趨勢線',
-                        color: '#f8fafc',
-                        font: { family: 'Inter', size: 14 },
-                    },
-                    legend: { position: 'bottom', labels: { color: '#94a3b8' } },
-                },
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1, color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                },
-            },
-        });
-    }
-}
-
-async function getSectorChartRecommendations() {
-    if (window._isStatic) {
-        return (window._staticData && window._staticData.recommendations) || [];
-    }
-    try {
-        const res = await fetch('/api/recommendations');
-        if (!res.ok) return [];
-        return await res.json();
-    } catch (err) {
-        console.error('Sector recommendations load error:', err);
-        return [];
-    }
-}
-
-function getRecommendationDate(rec) {
-    const raw = rec.published_at || rec.video_date || rec.created_at || rec.last_tracked || '';
-    return raw ? String(raw).split('T')[0].split(' ')[0] : '';
-}
-
-function ensureSectorSelectionContainer() {
-    if (document.getElementById('chartSelectionPanel')) return;
-    const tab = document.getElementById('tab-sectors');
-    if (!tab) return;
-    const panel = document.createElement('div');
-    panel.id = 'chartSelectionPanel';
-    panel.className = 'card chart-selection-panel';
-    panel.innerHTML = '<div class="chart-selection-empty">點選產業分布或情緒分布，可查看相對應的標的。</div>';
-    tab.appendChild(panel);
-}
-
-function renderChartSelection(type, value, recs) {
-    const panel = document.getElementById('chartSelectionPanel');
-    if (!panel) return;
-
-    const filtered = recs.filter(rec => {
-        if (type === 'sector') return rec.sector === value;
-        if (type === 'sentiment') return rec.sentiment === value;
-        return false;
-    });
-    const grouped = new Map();
-    filtered.forEach(rec => {
-        const symbol = normalizeSymbol(rec.stock_symbol);
-        if (!symbol) return;
-        if (!grouped.has(symbol)) {
-            grouped.set(symbol, {
-                symbol,
-                name: rec.stock_name || symbol,
-                sector: rec.sector || '-',
-                sentiment: rec.sentiment || 'neutral',
-                latest_price: rec.latest_price,
-                latest_change_pct: rec.latest_change_pct,
-                mentions: 0,
-            });
-        }
-        const item = grouped.get(symbol);
-        item.mentions += 1;
-        if (rec.latest_price !== null && rec.latest_price !== undefined) item.latest_price = rec.latest_price;
-        if (rec.latest_change_pct !== null && rec.latest_change_pct !== undefined) item.latest_change_pct = rec.latest_change_pct;
-    });
-
-    const stocks = Array.from(grouped.values()).sort((a, b) => b.mentions - a.mentions);
-    const sentimentText = { bullish: '看多', bearish: '看空', neutral: '中性' };
-    const title = type === 'sector' ? `產業分布：${value}` : `情緒分布：${sentimentText[value] || value}`;
-
-    if (stocks.length === 0) {
-        panel.innerHTML = `<div class="chart-selection-empty">${escHtml(title)} 目前沒有對應標的。</div>`;
-        return;
-    }
-
-    panel.innerHTML = `
-        <div class="chart-selection-header">
-            <div>
-                <h3>${escHtml(title)}</h3>
-                <p>${stocks.length} 檔標的，${filtered.length} 次提及</p>
-            </div>
-        </div>
-        <div class="chart-stock-grid">
-            ${stocks.map(stock => `
-                <button class="chart-stock-item" onclick="showPerformanceChart('${escAttr(stock.symbol)}', '${escAttr(stock.name)}')">
-                    <span>
-                        <strong>${escHtml(stock.name)}</strong>
-                        <small>${escHtml(stock.symbol)} · ${escHtml(stock.sector)}</small>
-                    </span>
-                    <span class="chart-stock-meta">
-                        <span class="sentiment-badge ${stock.sentiment}">${sentimentText[stock.sentiment] || stock.sentiment}</span>
-                        <span class="${getChangeClass(stock.latest_change_pct)}">${formatChange(stock.latest_change_pct)}</span>
-                    </span>
-                </button>
-            `).join('')}
-        </div>
-    `;
 }
 
 // --- Update Prices ---
