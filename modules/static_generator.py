@@ -93,7 +93,7 @@ def generate_static_site():
                     try:
                         stock_info = stock_data.get_stock_data(clean_sym, market)
                         hist_prices = stock_data.get_historical_prices(clean_sym, market, period="3mo")
-                        if stock_info and not stock_info.get('error') and stock_info.get('current_price') is not None:
+                        if stock_info and not stock_info.get('error'):
                             data['watchlist_data'][clean_sym] = {
                                 'symbol': clean_sym,
                                 'name': stock_info['fundamentals'].get('company_name', clean_sym),
