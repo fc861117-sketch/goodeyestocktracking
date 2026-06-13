@@ -18,62 +18,6 @@ def _get_tw_suffix(symbol):
     return f"{symbol}.TW"
 
 
-def _clean_tw_symbol(symbol):
-    """Return the numeric Taiwan stock code without exchange suffix."""
-    return str(symbol).strip().upper().split('.')[0]
-
-
-def _get_ticker_candidates(symbol, market="TW"):
-    """Build yfinance ticker candidates, trying both listed and OTC Taiwan markets."""
-    clean_symbol = str(symbol).strip().upper()
-    if market != "TW":
-        return [clean_symbol]
-    if clean_symbol.endswith((".TW", ".TWO")):
-        return [clean_symbol]
-    clean_symbol = _clean_tw_symbol(clean_symbol)
-    return [f"{clean_symbol}.TW", f"{clean_symbol}.TWO"]
-
-
-def _extract_price_from_ticker(ticker):
-    """Read current price from yfinance with fast_info and history fallbacks."""
-    info = {}
-    try:
-        info = ticker.info or {}
-    except Exception as e:
-        logger.debug("yfinance info failed: %s", e)
-
-    price = (
-        info.get('currentPrice') or
-        info.get('regularMarketPrice') or
-        info.get('previousClose')
-    )
-    previous_close = info.get('previousClose')
-
-    if not price:
-        try:
-            fast_info = ticker.fast_info or {}
-            price = (
-                fast_info.get('last_price') or
-                fast_info.get('regular_market_price') or
-                fast_info.get('previous_close')
-            )
-            previous_close = previous_close or fast_info.get('previous_close')
-        except Exception as e:
-            logger.debug("yfinance fast_info failed: %s", e)
-
-    if not price:
-        try:
-            hist = ticker.history(period="5d")
-            if not hist.empty:
-                price = float(hist['Close'].dropna().iloc[-1])
-                if len(hist['Close'].dropna()) >= 2:
-                    previous_close = float(hist['Close'].dropna().iloc[-2])
-        except Exception as e:
-            logger.debug("yfinance price history fallback failed: %s", e)
-
-    return price, previous_close, info
-
-
 def get_stock_data(symbol, market="TW"):
     """
     Get comprehensive stock data for a given symbol.
@@ -87,8 +31,11 @@ def get_stock_data(symbol, market="TW"):
     """
     import yfinance as yf
 
-    ticker_candidates = _get_ticker_candidates(symbol, market)
-    ticker_symbol = ticker_candidates[0]
+    # Prepare the ticker symbol
+    if market == "TW":
+        ticker_symbol = _get_tw_suffix(symbol)
+    else:
+        ticker_symbol = symbol
 
     logger.info("Fetching stock data for %s (ticker: %s)", symbol, ticker_symbol)
 
@@ -112,23 +59,16 @@ def get_stock_data(symbol, market="TW"):
     }
 
     try:
-        info = {}
-        for candidate in ticker_candidates:
-            ticker_symbol = candidate
-            ticker = yf.Ticker(candidate)
-            price, previous_close, info = _extract_price_from_ticker(ticker)
-            if price:
-                result['ticker'] = candidate
-                result['current_price'] = float(price)
-                result['previous_close'] = float(previous_close) if previous_close else None
-                break
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.info or {}
 
-        if not info:
-            ticker = yf.Ticker(result['ticker'])
-            try:
-                info = ticker.info or {}
-            except Exception:
-                info = {}
+        # Current price
+        result['current_price'] = (
+            info.get('currentPrice') or
+            info.get('regularMarketPrice') or
+            info.get('previousClose')
+        )
+        result['previous_close'] = info.get('previousClose')
 
         if result['current_price'] and result['previous_close']:
             result['change_pct'] = round(
@@ -156,7 +96,7 @@ def get_stock_data(symbol, market="TW"):
 
         # Historical data
         try:
-            hist_1y = yf.Ticker(result['ticker']).history(period="1y")
+            hist_1y = ticker.history(period="1y")
             if not hist_1y.empty:
                 result['history_1y'] = {
                     'start_price': round(float(hist_1y['Close'].iloc[0]), 2),
@@ -219,6 +159,14 @@ def get_stock_data(symbol, market="TW"):
         if result['current_price'] is None and market == "TW":
             result['current_price'] = _get_twstock_price(symbol)
 
+        if result['current_price'] is None:
+            # Try .TWO (OTC market) if .TW failed
+            if market == "TW" and '.TWO' not in ticker_symbol:
+                logger.info("Trying OTC market for %s", symbol)
+                two_result = get_stock_data(symbol + '.TWO', market)
+                if two_result.get('current_price'):
+                    return two_result
+
         logger.info("Stock data for %s: price=%s, PE=%s",
                      symbol, result['current_price'],
                      result['fundamentals'].get('pe_ratio'))
@@ -241,7 +189,7 @@ def _get_twstock_price(symbol):
     try:
         import twstock
         # Remove any suffix
-        clean_symbol = _clean_tw_symbol(symbol)
+        clean_symbol = symbol.split('.')[0]
         stock = twstock.Stock(clean_symbol)
         if stock.price and len(stock.price) > 0:
             return float(stock.price[-1])
@@ -259,12 +207,21 @@ def get_current_price(symbol, market="TW"):
     """
     import yfinance as yf
 
+    if market == "TW":
+        ticker_symbol = _get_tw_suffix(symbol)
+    else:
+        ticker_symbol = symbol
+
     try:
-        for ticker_symbol in _get_ticker_candidates(symbol, market):
-            ticker = yf.Ticker(ticker_symbol)
-            price, _, _ = _extract_price_from_ticker(ticker)
-            if price:
-                return float(price)
+        ticker = yf.Ticker(ticker_symbol)
+        info = ticker.info or {}
+        price = (
+            info.get('currentPrice') or
+            info.get('regularMarketPrice') or
+            info.get('previousClose')
+        )
+        if price:
+            return float(price)
 
         # Fallback for TW stocks
         if market == "TW":
