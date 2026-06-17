@@ -16,7 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (isStatic) {
         // Load data.json once
-        fetchStaticData()
+        fetch('./data.json')
+            .then(res => res.json())
             .then(data => {
                 window._staticData = data;
                 // If token exists, try to sync first before loading dashboard
@@ -48,22 +49,11 @@ async function loadDashboard() {
             loadWatchlist(),
             loadHistory(),
         ]);
-        updateLastUpdateLabel();
+        document.getElementById('lastUpdate').textContent =
+            `最後更新: ${new Date().toLocaleString('zh-TW')}`;
     } catch (err) {
         console.error('Dashboard load error:', err);
     }
-}
-
-function fetchStaticData() {
-    return fetch(`./data.json?v=${Date.now()}`, { cache: 'no-store' })
-        .then(res => res.json());
-}
-
-function updateLastUpdateLabel() {
-    const updatedAt = window._staticData && (window._staticData.price_updated_at || window._staticData.generated_at);
-    const date = updatedAt ? new Date(updatedAt) : new Date();
-    document.getElementById('lastUpdate').textContent =
-        `最後更新: ${date.toLocaleString('zh-TW')}`;
 }
 
 // --- Tab Switching ---
@@ -1108,7 +1098,7 @@ async function loadSectorCharts() {
 }
 
 // --- Update Prices ---
-async function updatePricesLegacy() {
+async function updatePrices() {
     if (window._isStatic) {
         showToast('靜態網頁無法直接更新股價，請在本機執行腳本更新', 'info');
         return;
@@ -1131,38 +1121,6 @@ async function updatePricesLegacy() {
         }
     } catch (err) {
         showToast('❌ 更新請求失敗', 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">🔄</span> 更新股價';
-    }
-}
-
-async function updatePrices() {
-    const btn = document.getElementById('btnUpdatePrices');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="loading"></span> 更新中...';
-
-    try {
-        if (window._isStatic) {
-            const data = await fetchStaticData();
-            window._staticData = data;
-            recommendationIndex = null;
-            await loadDashboard();
-            showToast('已重新載入最新股價資料。實際行情由 GitHub Actions 定時更新。', 'success');
-            return;
-        }
-
-        const res = await fetch('/api/update-prices', { method: 'POST' });
-        const data = await res.json();
-
-        if (data.success) {
-            showToast(`股價更新完成：${data.stats.updated} 筆`, 'success');
-            await loadDashboard();
-        } else {
-            showToast(`更新失敗：${data.error}`, 'error');
-        }
-    } catch (err) {
-        showToast('更新失敗，請稍後再試', 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<span class="btn-icon">🔄</span> 更新股價';
