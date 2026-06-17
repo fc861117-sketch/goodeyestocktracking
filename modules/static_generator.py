@@ -2,7 +2,6 @@ import os
 import json
 import shutil
 import logging
-from datetime import datetime
 from modules import database as db
 from modules import stock_data
 
@@ -28,8 +27,7 @@ def generate_static_site():
         'reports': [dict(v) for v in videos],
         'recommendations': [dict(r) for r in recs],
         'details': {},
-        'performance': {},
-        'generated_at': datetime.now().astimezone().isoformat(timespec='seconds'),
+        'performance': {}
     }
     
     # Precompute details for each video
@@ -121,6 +119,8 @@ def generate_static_site():
     # Adjust paths for static deployment
     html = html.replace('href="/static/style.css"', 'href="./static/style.css"')
     html = html.replace('src="/static/app.js"', 'src="./static/app.js"')
+    # Hide update prices button in static mode
+    html = html.replace('id="btnUpdatePrices"', 'id="btnUpdatePrices" style="display:none"')
     
     with open(os.path.join(docs_dir, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(html)
