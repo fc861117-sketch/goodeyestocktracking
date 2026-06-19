@@ -105,6 +105,20 @@ body::before {
     gap: 14px;
 }
 
+.logo-home-link {
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    padding: 6px 8px;
+    margin-left: -8px;
+    transition: var(--transition);
+}
+
+.logo-home-link:hover,
+.logo-home-link:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+}
+
 .logo-icon {
     font-size: 32px;
     filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
@@ -199,7 +213,7 @@ body::before {
 /* --- Main Content --- */
 .main-content {
     position: relative;
-    z-index: 1;
+    z-index: auto;
     max-width: 1400px;
     margin: 0 auto;
     padding: 24px;
@@ -840,10 +854,9 @@ body::before {
 /* --- Modal --- */
 .modal-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100dvh;
+    inset: 0;
+    width: 100vw;
+    min-height: 100dvh;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px);
     z-index: 2147483000;
@@ -885,9 +898,9 @@ body::before {
 }
 
 .modal-close {
-    background: none;
-    border: none;
-    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
     font-size: 20px;
     cursor: pointer;
     padding: 4px 8px;
@@ -1029,14 +1042,14 @@ body::before {
     .modal {
         width: 100%;
         margin: 0;
-        height: calc(100dvh - 24px);
-        max-height: calc(100dvh - 24px);
+        height: calc(100dvh - max(16px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+        max-height: calc(100dvh - max(16px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
         border-radius: 0;
     }
     .modal-overlay {
         align-items: flex-start;
         padding: 8px;
-        padding-top: max(12px, env(safe-area-inset-top));
+        padding-top: max(16px, env(safe-area-inset-top));
         padding-bottom: max(8px, env(safe-area-inset-bottom));
         z-index: 2147483000;
     }
