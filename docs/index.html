@@ -15,7 +15,7 @@
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="logo logo-home-link" role="button" tabindex="0" onclick="goHome()" onkeydown="handleHomeKey(event)" title="回到首頁">
+            <div class="logo">
                 <span class="logo-icon">📊</span>
                 <div>
                     <h1>股癌分析儀表板</h1>
@@ -108,6 +108,19 @@
                     <h3>尚無追蹤資料</h3>
                 </div>
             </div>
+            <!-- Performance Chart Modal -->
+            <div class="modal-overlay" id="chartModal" style="display:none">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 id="chartTitle">績效走勢</h3>
+                        <button class="modal-close" onclick="closeChartModal()">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                    <div class="modal-detail" id="modalDetail"></div>
+                </div>
+            </div>
         </section>
 
         <!-- Watchlist Tab -->
@@ -165,20 +178,6 @@
             </div>
         </section>
     </main>
-
-    <!-- Performance Chart Modal -->
-    <div class="modal-overlay" id="chartModal" style="display:none">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="chartTitle">績效走勢</h3>
-                <button class="modal-close" onclick="closeChartModal()">✕</button>
-            </div>
-            <div class="modal-body">
-                <canvas id="performanceChart"></canvas>
-            </div>
-            <div class="modal-detail" id="modalDetail"></div>
-        </div>
-    </div>
 
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal" style="display:none">
