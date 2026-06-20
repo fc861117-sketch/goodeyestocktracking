@@ -40,20 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-function goHome() {
-    closeChartModal();
-    closeSettingsModal();
-    switchTab('latest');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function handleHomeKey(event) {
-    if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        goHome();
-    }
-}
-
 async function loadDashboard() {
     try {
         await Promise.all([
@@ -522,12 +508,10 @@ async function loadWatchlist() {
 function openSettingsModal() {
     document.getElementById('githubTokenInput').value = githubApiToken;
     document.getElementById('settingsModal').style.display = 'flex';
-    document.body.classList.add('modal-open');
 }
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').style.display = 'none';
-    document.body.classList.remove('modal-open');
 }
 
 function saveSettings() {
@@ -699,7 +683,6 @@ async function showPerformanceChart(symbol, name) {
 
         titleEl.textContent = `📈 ${name} 績效走勢`;
         modal.style.display = 'flex';
-        document.body.classList.add('modal-open');
 
         const rec = data.recommendation || {};
         const allMentions = data.all_mentions || [];
@@ -874,7 +857,6 @@ async function showPerformanceChart(symbol, name) {
 
 function closeChartModal() {
     document.getElementById('chartModal').style.display = 'none';
-    document.body.classList.remove('modal-open');
     if (currentChart) {
         currentChart.destroy();
         currentChart = null;
