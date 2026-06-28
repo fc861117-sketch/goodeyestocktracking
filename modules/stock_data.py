@@ -223,16 +223,28 @@ def get_current_price(symbol, market="TW"):
         if price:
             return float(price)
 
-        # Fallback for TW stocks
-        if market == "TW":
-            return _get_twstock_price(symbol)
-
     except Exception as e:
-        logger.warning("Failed to get price for %s: %s", symbol, e)
+        logger.warning("Failed to get price for %s: %s", ticker_symbol, e)
 
-        # Fallback for TW stocks
-        if market == "TW":
-            return _get_twstock_price(symbol)
+    # If .TW failed or no price, try .TWO (OTC market)
+    if market == "TW" and '.TWO' not in ticker_symbol:
+        two_symbol = symbol.split('.')[0] + '.TWO'
+        try:
+            ticker_two = yf.Ticker(two_symbol)
+            info_two = ticker_two.info or {}
+            price_two = (
+                info_two.get('currentPrice') or
+                info_two.get('regularMarketPrice') or
+                info_two.get('previousClose')
+            )
+            if price_two:
+                return float(price_two)
+        except Exception as e:
+            logger.warning("Failed to get price for %s: %s", two_symbol, e)
+
+    # Fallback to twstock for TW stocks
+    if market == "TW":
+        return _get_twstock_price(symbol)
 
     return None
 
