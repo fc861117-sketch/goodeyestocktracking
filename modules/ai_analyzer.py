@@ -50,9 +50,14 @@ def _call_gemini(client, prompt, retries=MAX_RETRIES):
             for attempt in range(retries):
                 try:
                     logger.info("Calling Gemini model: %s (attempt %d)", model_name, attempt + 1)
+                    from google.genai import types
                     response = client.models.generate_content(
                         model=model_name,
                         contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            max_output_tokens=8192,
+                        )
                     )
                     return response.text
                 except Exception as e:
