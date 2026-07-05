@@ -159,6 +159,7 @@ def analyze_content(transcript, api_key):
 - 台股代號必須是正確的數字代號（如台積電=2330, 聯發科=2454, 鴻海=2317）
 - 如果無法確認股票代號，stock_symbol 填寫股票名稱
 - 所有文字內容使用繁體中文
+- 最多提取前 10 檔最重要的個股，避免輸出過長，並確保 JSON 格式完整。
 
 ## 輸出格式（嚴格JSON）
 
@@ -201,11 +202,17 @@ def analyze_content(transcript, api_key):
 """
 
     logger.info("Analyzing transcript with Gemini (%d chars)...", len(transcript))
-    response_text = _call_gemini(client, prompt)
+    
+    result = None
+    for attempt in range(3):
+        response_text = _call_gemini(client, prompt)
+        result = _extract_json(response_text)
+        if result is not None:
+            break
+        logger.warning("Failed to parse AI analysis JSON (attempt %d/3). Retrying...", attempt + 1)
 
-    result = _extract_json(response_text)
     if result is None:
-        logger.error("Failed to parse AI analysis response")
+        logger.error("Failed to parse AI analysis response after retries")
         return {
             'stocks': [],
             'sectors': [],
@@ -285,11 +292,16 @@ def generate_investment_advice(stock_info, stock_data, api_key):
     logger.info("Generating investment advice for %s (%s)...",
                 stock_info.get('stock_name'), stock_info.get('stock_symbol'))
 
-    response_text = _call_gemini(client, prompt)
-    result = _extract_json(response_text)
+    result = None
+    for attempt in range(3):
+        response_text = _call_gemini(client, prompt)
+        result = _extract_json(response_text)
+        if result is not None:
+            break
+        logger.warning("Failed to parse investment advice JSON (attempt %d/3). Retrying...", attempt + 1)
 
     if result is None:
-        logger.error("Failed to parse investment advice response")
+        logger.error("Failed to parse investment advice response after retries")
         return {
             'target_price': None,
             'buy_price': None,
