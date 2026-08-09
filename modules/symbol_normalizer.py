@@ -1,12 +1,23 @@
-"""Normalize extracted stock identifiers before price lookup."""
+"""Normalize extracted stock identifiers before price lookup.
 
+Project-specific aliases live in config/symbol_aliases.json so future fixes do
+not require code changes.
+"""
+
+import json
+import os
 import re
 
 
-UNTRACKABLE_SYMBOLS = {
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ALIAS_PATH = os.path.join(PROJECT_ROOT, "config", "symbol_aliases.json")
+
+
+DEFAULT_UNTRACKABLE = {
     "ANTHROPIC",
+    "CPU",
+    "CPU STOCKS",
     "CRADLE",
-    "CPU類股",
     "EMPANON",
     "FLYBE",
     "N/A",
@@ -15,35 +26,57 @@ UNTRACKABLE_SYMBOLS = {
     "STRATLABS",
     "STRELABS",
     "TXF",
-    "台中亞都麗緻",
-    "日股斜坡減速器",
 }
 
 
-ALIASES = {
-    "CLOUDFLARE": ("NET", "Cloudflare", "US"),
-    "GOOGLE": ("GOOGL", "Alphabet", "US"),
-    "NVIDIA": ("NVDA", "NVIDIA", "US"),
-    "PALANTIR": ("PLTR", "Palantir", "US"),
-    "SK HYNIX": ("000660.KS", "SK Hynix", "KR"),
-    "TAKE-TWO INTERACTIVE": ("TTWO", "Take-Two Interactive", "US"),
-    "TPE: NVDA": ("NVDA", "NVIDIA", "US"),
-    "ZOOM TECHNOLOGIES": ("ZM", "Zoom Video", "US"),
-    "花網": ("NET", "Cloudflare", "US"),
-    "日月光投控": ("3711", "日月光投控", "TW"),
-    "華潤微": ("688396.SS", "華潤微", "CN"),
-    "斯蘭微": ("600460.SS", "斯蘭微", "CN"),
-    "江海股份": ("002484.SZ", "江海股份", "CN"),
+DEFAULT_ALIASES = {
+    "CLOUDFLARE": {"symbol": "NET", "name": "Cloudflare", "market": "US"},
+    "GOOGLE": {"symbol": "GOOGL", "name": "Alphabet", "market": "US"},
+    "NVIDIA": {"symbol": "NVDA", "name": "NVIDIA", "market": "US"},
+    "PALANTIR": {"symbol": "PLTR", "name": "Palantir", "market": "US"},
+    "SK HYNIX": {"symbol": "000660.KS", "name": "SK Hynix", "market": "KR"},
+    "TAKE-TWO INTERACTIVE": {"symbol": "TTWO", "name": "Take-Two Interactive", "market": "US"},
+    "TPE: NVDA": {"symbol": "NVDA", "name": "NVIDIA", "market": "US"},
+    "ZOOM TECHNOLOGIES": {"symbol": "ZM", "name": "Zoom Video", "market": "US"},
 }
 
 
-SYMBOL_ALIASES = {
-    "2311": ("3711", "日月光投控", "TW"),
-    "4180": ("4180.T", "Appier Group", "JP"),
-    "6996 JP": ("6996.T", "Nichicon", "JP"),
-    "6996.JP": ("6996.T", "Nichicon", "JP"),
-    "6997.JP": ("6997.T", "Nippon Chemi-Con", "JP"),
+DEFAULT_SYMBOL_ALIASES = {
+    "2311": {"symbol": "3711", "name": "ASE Technology", "market": "TW"},
+    "4180": {"symbol": "4180.T", "name": "Appier Group", "market": "JP"},
+    "6996 JP": {"symbol": "6996.T", "name": "Nichicon", "market": "JP"},
+    "6996.JP": {"symbol": "6996.T", "name": "Nichicon", "market": "JP"},
+    "6997.JP": {"symbol": "6997.T", "name": "Nippon Chemi-Con", "market": "JP"},
 }
+
+
+def _load_external_config():
+    if not os.path.exists(ALIAS_PATH):
+        return {}, {}, set()
+    with open(ALIAS_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    aliases = data.get("aliases") or {}
+    symbol_aliases = data.get("symbol_aliases") or {}
+    untrackable = set(data.get("untrackable_symbols") or [])
+    return aliases, symbol_aliases, untrackable
+
+
+def _entry_to_tuple(entry):
+    if isinstance(entry, dict):
+        return entry.get("symbol"), entry.get("name"), entry.get("market")
+    return entry
+
+
+def _merged_config():
+    aliases = dict(DEFAULT_ALIASES)
+    symbol_aliases = dict(DEFAULT_SYMBOL_ALIASES)
+    untrackable = set(DEFAULT_UNTRACKABLE)
+
+    external_aliases, external_symbol_aliases, external_untrackable = _load_external_config()
+    aliases.update({symbol_key(k): v for k, v in external_aliases.items()})
+    symbol_aliases.update({symbol_key(k): v for k, v in external_symbol_aliases.items()})
+    untrackable.update(symbol_key(v) for v in external_untrackable)
+    return aliases, symbol_aliases, untrackable
 
 
 def symbol_key(value):
@@ -65,69 +98,66 @@ def infer_market(symbol, fallback="TW"):
     return fallback or "US"
 
 
+def _normalized_response(symbol, name, market, trackable=True, reason="unchanged"):
+    return {
+        "symbol": symbol,
+        "name": name or symbol,
+        "market": market or infer_market(symbol),
+        "trackable": trackable,
+        "reason": reason,
+    }
+
+
 def normalize_symbol(symbol, name="", market=""):
     """Return normalized symbol metadata for price lookup and display."""
     raw_symbol = str(symbol or "").strip()
     raw_name = str(name or "").strip()
     key = symbol_key(raw_symbol)
     name_key = symbol_key(raw_name)
+    aliases, symbol_aliases, untrackable = _merged_config()
 
-    if key in UNTRACKABLE_SYMBOLS or name_key in UNTRACKABLE_SYMBOLS:
-        return {
-            "symbol": raw_symbol,
-            "name": raw_name or raw_symbol,
-            "market": market or infer_market(raw_symbol),
-            "trackable": False,
-            "reason": "not_publicly_traded",
-        }
+    if key in untrackable or name_key in untrackable:
+        return _normalized_response(
+            raw_symbol,
+            raw_name or raw_symbol,
+            market or infer_market(raw_symbol),
+            trackable=False,
+            reason="not_publicly_traded",
+        )
 
-    if key in SYMBOL_ALIASES:
-        normalized_symbol, normalized_name, normalized_market = SYMBOL_ALIASES[key]
-        return {
-            "symbol": normalized_symbol,
-            "name": raw_name or normalized_name,
-            "market": normalized_market,
-            "trackable": True,
-            "reason": "symbol_alias",
-        }
+    if key in symbol_aliases:
+        normalized_symbol, normalized_name, normalized_market = _entry_to_tuple(symbol_aliases[key])
+        return _normalized_response(
+            normalized_symbol,
+            raw_name or normalized_name,
+            normalized_market,
+            reason="symbol_alias",
+        )
 
-    if key in ALIASES:
-        normalized_symbol, normalized_name, normalized_market = ALIASES[key]
-        return {
-            "symbol": normalized_symbol,
-            "name": raw_name or normalized_name,
-            "market": normalized_market,
-            "trackable": True,
-            "reason": "name_alias",
-        }
-
-    if name_key in ALIASES:
-        normalized_symbol, normalized_name, normalized_market = ALIASES[name_key]
-        return {
-            "symbol": normalized_symbol,
-            "name": raw_name or normalized_name,
-            "market": normalized_market,
-            "trackable": True,
-            "reason": "name_alias",
-        }
+    for alias_key in (key, name_key):
+        if alias_key in aliases:
+            normalized_symbol, normalized_name, normalized_market = _entry_to_tuple(aliases[alias_key])
+            return _normalized_response(
+                normalized_symbol,
+                raw_name or normalized_name,
+                normalized_market,
+                reason="name_alias",
+            )
 
     jp_match = re.fullmatch(r"(\d{4})\s*JP", key)
     if jp_match:
-        return {
-            "symbol": f"{jp_match.group(1)}.T",
-            "name": raw_name or raw_symbol,
-            "market": "JP",
-            "trackable": True,
-            "reason": "jp_suffix",
-        }
+        return _normalized_response(
+            f"{jp_match.group(1)}.T",
+            raw_name or raw_symbol,
+            "JP",
+            reason="jp_suffix",
+        )
 
-    return {
-        "symbol": raw_symbol,
-        "name": raw_name or raw_symbol,
-        "market": market or infer_market(raw_symbol),
-        "trackable": True,
-        "reason": "unchanged",
-    }
+    return _normalized_response(
+        raw_symbol,
+        raw_name or raw_symbol,
+        market or infer_market(raw_symbol),
+    )
 
 
 def normalize_stock_record(record):
@@ -142,4 +172,7 @@ def normalize_stock_record(record):
     if not normalized["trackable"]:
         record["is_trackable"] = False
         record["tracking_note"] = normalized["reason"]
+    else:
+        record.pop("is_trackable", None)
+        record.pop("tracking_note", None)
     return record

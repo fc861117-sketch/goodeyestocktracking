@@ -189,6 +189,7 @@ function renderStockCard(rec) {
     const sentiment = rec.sentiment || 'neutral';
     const sentimentLabel = rec.is_custom ? '自選' : ({ bullish: '看多', bearish: '看空', neutral: '中性' }[sentiment] || '中性');
     const cardId = `stock-${rec.id}`;
+    const trackingStatus = getTrackingStatus(rec);
     
     const targetPriceHTML = rec.is_custom ? '-' : formatPrice(rec.target_price);
     const stopLossHTML = rec.is_custom ? '-' : formatPrice(rec.stop_loss);
@@ -201,8 +202,12 @@ function renderStockCard(rec) {
                     <span class="stock-name">${escHtml(rec.stock_name || rec.stock_symbol)}</span>
                     <span class="stock-symbol">${escHtml(rec.stock_symbol)}</span>
                 </div>
-                <span class="sentiment-badge ${sentiment}">${sentimentLabel}</span>
+                <div class="stock-badges">
+                    <span class="sentiment-badge ${sentiment}">${sentimentLabel}</span>
+                    ${trackingStatus ? `<span class="tracking-badge ${trackingStatus.type}">${trackingStatus.label}</span>` : ''}
+                </div>
             </div>
+            ${trackingStatus ? `<div class="tracking-note">${trackingStatus.note}</div>` : ''}
             
             <div class="stock-opinion">${escHtml(rec.gooaye_opinion || '無觀點資料')}</div>
             
@@ -1160,6 +1165,24 @@ function formatPrice(price) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
+}
+
+function getTrackingStatus(rec) {
+    if (rec.is_trackable === false) {
+        return {
+            type: 'untrackable',
+            label: '無公開報價',
+            note: '此項目不是可直接追蹤的公開上市標的，已排除即時股價更新。',
+        };
+    }
+    if ((rec.latest_price === null || rec.latest_price === undefined || rec.latest_price === 0) && !rec.is_custom) {
+        return {
+            type: 'warning',
+            label: '待確認代號',
+            note: '目前資料源抓不到即時價格，可能是代號錯誤、下市、ETF格式不支援或市場資料源缺漏。',
+        };
+    }
+    return null;
 }
 
 function formatChange(pct) {

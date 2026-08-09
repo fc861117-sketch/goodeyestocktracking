@@ -1,0 +1,36 @@
+{
+  "aliases": {
+    "江海股份": {
+      "symbol": "002484.SZ",
+      "name": "江海股份",
+      "market": "CN"
+    },
+    "斯蘭微": {
+      "symbol": "600460.SS",
+      "name": "斯蘭微",
+      "market": "CN"
+    },
+    "華潤微": {
+      "symbol": "688396.SS",
+      "name": "華潤微",
+      "market": "CN"
+    },
+    "花網": {
+      "symbol": "NET",
+      "name": "Cloudflare",
+      "market": "US"
+    }
+  },
+  "symbol_aliases": {
+    "2311": {
+      "symbol": "3711",
+      "name": "日月光投控",
+      "market": "TW"
+    }
+  },
+  "untrackable_symbols": [
+    "CPU類股",
+    "台中亞都麗緻",
+    "日股斜坡減速器"
+  ]
+}

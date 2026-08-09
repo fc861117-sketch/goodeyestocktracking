@@ -1,0 +1,93 @@
+name: Analyze podcast content
+
+on:
+  schedule:
+    # Tuesday and Friday 02:20 UTC = 10:20 Asia/Taipei.
+    - cron: "20 2 * * 2,5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: analyze-podcast-content
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build runtime config
+        env:
+          GOOAYE_YOUTUBE_CHANNEL_ID: ${{ secrets.GOOAYE_YOUTUBE_CHANNEL_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          config = {
+              "youtube_channel_id": os.environ.get("GOOAYE_YOUTUBE_CHANNEL_ID", "UC_f21h7gV5bF022tM-t7_sw"),
+              "gemini_api_key": os.environ["GEMINI_API_KEY"],
+              "whisper_model": "small",
+              "whisper_device": "cpu",
+              "language": "zh",
+              "dashboard_port": 5000,
+              "max_initial_videos": 2,
+              "email_config": {
+                  "smtp_server": "smtp.gmail.com",
+                  "smtp_port": 587,
+                  "sender_email": os.environ.get("EMAIL_SENDER", ""),
+                  "sender_password": os.environ.get("EMAIL_PASSWORD", ""),
+                  "recipient_email": os.environ.get("EMAIL_RECIPIENT", ""),
+              },
+          }
+
+          with open("config.json", "w", encoding="utf-8") as f:
+              json.dump(config, f, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Sync latest main
+        run: git pull --rebase origin main
+
+      - name: Bootstrap database from static data
+        run: python modules/docs_data_importer.py
+
+      - name: Analyze latest videos
+        run: python main.py analyze --limit 2
+
+      - name: Refresh static prices
+        run: python modules/static_price_refresher.py
+
+      - name: Commit updated analysis
+        run: |
+          if git diff --quiet -- docs; then
+            echo "No generated data changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git commit -m "auto: analyze latest podcast content"
+          git pull --rebase origin main
+          git push

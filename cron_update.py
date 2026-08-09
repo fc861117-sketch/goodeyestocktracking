@@ -16,6 +16,11 @@ LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(LOCAL_DIR, "data", "cron_run.log")
 
 FILES_TO_CHECK = [
+    ".github/workflows/analyze-content.yml",
+    ".github/workflows/refresh-prices.yml",
+    "config/symbol_aliases.json",
+    "modules/docs_data_importer.py",
+    "modules/symbol_normalizer.py",
     "modules/stock_data.py",
     "modules/ai_analyzer.py",
     "modules/report_generator.py",
@@ -106,6 +111,18 @@ def upload_file_to_github(path, content_bytes, sha, message):
 def run_analysis():
     log("Starting Gooaye Stock Analyzer update cycle...")
     try:
+        bootstrap_cmd = [sys.executable, "modules/docs_data_importer.py"]
+        log(f"Bootstrapping DB if needed: {' '.join(bootstrap_cmd)}")
+        subprocess.run(
+            bootstrap_cmd,
+            cwd=LOCAL_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
         # Run main.py analyze
         cmd = [sys.executable, "main.py", "analyze"]
         log(f"Running command: {' '.join(cmd)}")
@@ -172,9 +189,28 @@ def generate_static():
     except Exception as e:
         log(f"Error generating static site: {e}")
 
+def refresh_static_prices():
+    log("Refreshing static stock prices...")
+    try:
+        cmd = [sys.executable, "modules/static_price_refresher.py"]
+        result = subprocess.run(
+            cmd,
+            cwd=LOCAL_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        for line in result.stdout.splitlines():
+            log(f"  [prices] {line}")
+    except Exception as e:
+        log(f"Error refreshing static prices: {e}")
+
 def main():
     run_analysis()
     generate_static()
+    refresh_static_prices()
     deploy_changes()
     log("Update cycle complete.")
 
