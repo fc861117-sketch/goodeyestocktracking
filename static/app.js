@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (isStatic) {
         // Load data.json once
-        fetch('./data.json')
+        fetchStaticData()
             .then(res => res.json())
             .then(data => {
                 window._staticData = data;
@@ -49,11 +49,22 @@ async function loadDashboard() {
             loadWatchlist(),
             loadHistory(),
         ]);
-        document.getElementById('lastUpdate').textContent =
-            `最後更新: ${new Date().toLocaleString('zh-TW')}`;
+        updateLastUpdateLabel();
     } catch (err) {
         console.error('Dashboard load error:', err);
     }
+}
+
+function fetchStaticData() {
+    return fetch(`./data.json?v=${Date.now()}`, { cache: 'no-store' })
+        .then(res => res.json());
+}
+
+function updateLastUpdateLabel() {
+    const updatedAt = window._staticData && (window._staticData.price_updated_at || window._staticData.generated_at);
+    const date = updatedAt ? new Date(updatedAt) : new Date();
+    document.getElementById('lastUpdate').textContent =
+        `最後更新: ${date.toLocaleString('zh-TW')}`;
 }
 
 // --- Tab Switching ---
@@ -1099,16 +1110,19 @@ async function loadSectorCharts() {
 
 // --- Update Prices ---
 async function updatePrices() {
-    if (window._isStatic) {
-        showToast('靜態網頁無法直接更新股價，請在本機執行腳本更新', 'info');
-        return;
-    }
-    
     const btn = document.getElementById('btnUpdatePrices');
     btn.disabled = true;
     btn.innerHTML = '<span class="loading"></span> 更新中...';
 
     try {
+        if (window._isStatic) {
+            const data = await fetchStaticData();
+            window._staticData = data;
+            await loadDashboard();
+            showToast('已重新載入最新股價資料。實際行情由排程定時更新。', 'success');
+            return;
+        }
+
         const res = await fetch('/api/update-prices', { method: 'POST' });
         const data = await res.json();
 

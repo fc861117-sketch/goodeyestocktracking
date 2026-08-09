@@ -5,6 +5,7 @@ Retrieves current prices, historical data, and fundamentals for TW and US stocks
 
 import logging
 from datetime import datetime, timedelta
+from modules.symbol_normalizer import normalize_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,53 @@ def _get_tw_suffix(symbol):
     # Most listed stocks use .TW, OTC stocks use .TWO
     # Try .TW first (more common)
     return f"{symbol}.TW"
+
+
+def _ticker_symbol_for(symbol, market="TW"):
+    normalized = normalize_symbol(symbol, market=market)
+    clean_symbol = normalized["symbol"]
+    normalized_market = normalized["market"]
+
+    if normalized_market == "TW":
+        return _get_tw_suffix(clean_symbol), normalized_market, normalized
+    return clean_symbol, normalized_market, normalized
+
+
+def _price_from_ticker(ticker):
+    """Use fast quote paths before falling back to full ticker.info."""
+    try:
+        fast_info = getattr(ticker, "fast_info", None)
+        if fast_info:
+            price = (
+                fast_info.get("last_price") or
+                fast_info.get("regular_market_price") or
+                fast_info.get("previous_close")
+            )
+            if price:
+                return float(price)
+    except Exception as e:
+        logger.debug("fast_info price lookup failed: %s", e)
+
+    try:
+        info = ticker.info or {}
+        price = (
+            info.get('currentPrice') or
+            info.get('regularMarketPrice') or
+            info.get('previousClose')
+        )
+        if price:
+            return float(price)
+    except Exception as e:
+        logger.debug("ticker.info price lookup failed: %s", e)
+
+    try:
+        hist = ticker.history(period="5d")
+        if not hist.empty:
+            return float(hist["Close"].dropna().iloc[-1])
+    except Exception as e:
+        logger.debug("history price lookup failed: %s", e)
+
+    return None
 
 
 def get_stock_data(symbol, market="TW"):
@@ -32,10 +80,8 @@ def get_stock_data(symbol, market="TW"):
     import yfinance as yf
 
     # Prepare the ticker symbol
-    if market == "TW":
-        ticker_symbol = _get_tw_suffix(symbol)
-    else:
-        ticker_symbol = symbol
+    ticker_symbol, market, normalized = _ticker_symbol_for(symbol, market)
+    symbol = normalized["symbol"]
 
     logger.info("Fetching stock data for %s (ticker: %s)", symbol, ticker_symbol)
 
@@ -63,11 +109,7 @@ def get_stock_data(symbol, market="TW"):
         info = ticker.info or {}
 
         # Current price
-        result['current_price'] = (
-            info.get('currentPrice') or
-            info.get('regularMarketPrice') or
-            info.get('previousClose')
-        )
+        result['current_price'] = _price_from_ticker(ticker)
         result['previous_close'] = info.get('previousClose')
 
         if result['current_price'] and result['previous_close']:
@@ -207,19 +249,12 @@ def get_current_price(symbol, market="TW"):
     """
     import yfinance as yf
 
-    if market == "TW":
-        ticker_symbol = _get_tw_suffix(symbol)
-    else:
-        ticker_symbol = symbol
+    ticker_symbol, market, normalized = _ticker_symbol_for(symbol, market)
+    symbol = normalized["symbol"]
 
     try:
         ticker = yf.Ticker(ticker_symbol)
-        info = ticker.info or {}
-        price = (
-            info.get('currentPrice') or
-            info.get('regularMarketPrice') or
-            info.get('previousClose')
-        )
+        price = _price_from_ticker(ticker)
         if price:
             return float(price)
 
@@ -255,6 +290,9 @@ def get_historical_prices(symbol, market="TW", period="3mo"):
     """
     import yfinance as yf
     
+    ticker_symbol, market, normalized = _ticker_symbol_for(symbol, market)
+    symbol = normalized["symbol"]
+
     if market == "TW":
         ticker_symbols = []
         if '.' in symbol:
@@ -263,7 +301,7 @@ def get_historical_prices(symbol, market="TW", period="3mo"):
             ticker_symbols.append(f"{symbol}.TW")
             ticker_symbols.append(f"{symbol}.TWO")
     else:
-        ticker_symbols = [symbol]
+        ticker_symbols = [ticker_symbol]
         
     for ticker_symbol in ticker_symbols:
         try:

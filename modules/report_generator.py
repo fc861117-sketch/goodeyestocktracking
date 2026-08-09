@@ -6,6 +6,7 @@ import logging
 from modules import database as db
 from modules import stock_data
 from modules import ai_analyzer
+from modules.symbol_normalizer import normalize_stock_record
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,16 @@ def generate_report(video_info, transcript, api_key):
         logger.info("[Step 2/4] Processing %d identified stocks...", len(stocks))
 
     for i, stock_info in enumerate(stocks, 1):
+        stock_info = normalize_stock_record(stock_info)
         symbol = stock_info.get('stock_symbol', '')
         name = stock_info.get('stock_name', '')
         market = stock_info.get('market', 'TW')
 
         if not symbol:
             logger.warning("Skipping stock with no symbol: %s", name)
+            continue
+        if stock_info.get('is_trackable') is False:
+            logger.info("Skipping untrackable stock-like mention: %s (%s)", name, symbol)
             continue
 
         logger.info("[Step 3/4] Fetching data for %s (%s) [%d/%d]...",

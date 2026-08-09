@@ -9,6 +9,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from modules import stock_data
+from modules.symbol_normalizer import infer_market, normalize_stock_record, normalize_symbol
 
 
 DATA_PATH = os.path.join(PROJECT_ROOT, "docs", "data.json")
@@ -19,10 +20,29 @@ def _symbol_key(symbol):
 
 
 def _market_for_symbol(symbol, fallback="TW"):
-    clean = _symbol_key(symbol)
-    if clean.endswith((".TW", ".TWO")) or any(ch.isdigit() for ch in clean):
-        return "TW"
-    return fallback or "US"
+    return infer_market(symbol, fallback)
+
+
+def _normalize_recommendations(recommendations):
+    normalized = 0
+    skipped = []
+    for rec in recommendations:
+        before = (
+            rec.get("stock_symbol"),
+            rec.get("stock_name"),
+            rec.get("market"),
+        )
+        normalize_stock_record(rec)
+        after = (
+            rec.get("stock_symbol"),
+            rec.get("stock_name"),
+            rec.get("market"),
+        )
+        if before != after:
+            normalized += 1
+        if rec.get("is_trackable") is False:
+            skipped.append(rec.get("stock_symbol") or rec.get("stock_name"))
+    return normalized, sorted(set(_symbol_key(s) for s in skipped if s))
 
 
 def _change_pct(current_price, base_price):
@@ -34,6 +54,8 @@ def _change_pct(current_price, base_price):
 def _fetch_prices(recommendations):
     symbols = {}
     for rec in recommendations:
+        if rec.get("is_trackable") is False:
+            continue
         symbol = _symbol_key(rec.get("stock_symbol"))
         if not symbol:
             continue
@@ -93,12 +115,27 @@ def _update_performance(data, prices):
     today = date.today().isoformat()
     performance = data.get("performance") or {}
 
+    migrated = {}
+    migrated_from = []
     for symbol, perf in performance.items():
-        key = _symbol_key(symbol)
+        rec = perf.get("recommendation") or {}
+        normalized = normalize_symbol(symbol, rec.get("stock_name"), rec.get("market"))
+        if normalized["trackable"]:
+            key = _symbol_key(normalized["symbol"])
+            if key != _symbol_key(symbol):
+                rec["stock_symbol"] = normalized["symbol"]
+                rec["stock_name"] = rec.get("stock_name") or normalized["name"]
+                rec["market"] = normalized["market"]
+                migrated[normalized["symbol"]] = perf
+                migrated_from.append(symbol)
+        else:
+            rec["is_trackable"] = False
+            rec["tracking_note"] = normalized["reason"]
+            key = _symbol_key(symbol)
+
         if key not in prices:
             continue
 
-        rec = perf.get("recommendation") or {}
         current_price = prices[key]
         rec["latest_price"] = current_price
         rec["latest_change_pct"] = _change_pct(current_price, rec.get("price_at_mention"))
@@ -113,18 +150,32 @@ def _update_performance(data, prices):
         })
         perf["history"] = sorted(history, key=lambda h: h.get("tracked_date") or "")
 
+    for symbol in migrated_from:
+        performance.pop(symbol, None)
+    for symbol, perf in migrated.items():
+        performance[symbol] = perf
+
 
 def _update_details(data, prices):
     for detail in (data.get("details") or {}).values():
         for rec in detail.get("recommendations") or []:
+            normalize_stock_record(rec)
             _update_recommendation(rec, prices)
 
 
 def _update_watchlist(data):
     watchlist_data = data.get("watchlist_data") or {}
     for symbol, item in watchlist_data.items():
-        market = item.get("market") or _market_for_symbol(symbol)
-        stock_info = stock_data.get_stock_data(symbol, market)
+        normalized = normalize_symbol(symbol, item.get("name"), item.get("market"))
+        if not normalized["trackable"]:
+            item["is_trackable"] = False
+            item["tracking_note"] = normalized["reason"]
+            continue
+
+        item["symbol"] = normalized["symbol"]
+        item["market"] = normalized["market"]
+        market = normalized["market"]
+        stock_info = stock_data.get_stock_data(normalized["symbol"], market)
         if not stock_info or stock_info.get("current_price") is None:
             continue
 
@@ -134,7 +185,7 @@ def _update_watchlist(data):
         item["change_pct"] = stock_info.get("change_pct")
         item["last_tracked"] = date.today().isoformat()
 
-        hist_prices = stock_data.get_historical_prices(symbol, market, period="3mo")
+        hist_prices = stock_data.get_historical_prices(normalized["symbol"], market, period="3mo")
         if hist_prices:
             item["history"] = [
                 {"tracked_date": d, "current_price": p}
@@ -147,6 +198,7 @@ def refresh_static_prices():
         data = json.load(f)
 
     recommendations = data.get("recommendations") or []
+    normalized_count, skipped_symbols = _normalize_recommendations(recommendations)
     prices, failures = _fetch_prices(recommendations)
 
     updated = 0
@@ -163,6 +215,8 @@ def refresh_static_prices():
     data["price_update_stats"] = {
         "updated_recommendations": updated,
         "updated_symbols": len(prices),
+        "normalized_recommendations": normalized_count,
+        "skipped_untrackable": skipped_symbols,
         "failed_symbols": failures,
     }
 

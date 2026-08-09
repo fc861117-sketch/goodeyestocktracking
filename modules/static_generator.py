@@ -2,8 +2,10 @@ import os
 import json
 import shutil
 import logging
+from datetime import datetime
 from modules import database as db
 from modules import stock_data
+from modules.symbol_normalizer import normalize_stock_record, normalize_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,16 @@ def generate_static_site():
     videos = db.get_all_videos()
     recs = db.get_all_recommendations()
     
+    rec_dicts = [normalize_stock_record(dict(r)) for r in recs]
+
     # Prepare data payload
     data = {
         'summary': summary_data,
         'reports': [dict(v) for v in videos],
-        'recommendations': [dict(r) for r in recs],
+        'recommendations': rec_dicts,
         'details': {},
-        'performance': {}
+        'performance': {},
+        'generated_at': datetime.now().astimezone().isoformat(timespec='seconds'),
     }
     
     # Precompute details for each video
@@ -35,13 +40,16 @@ def generate_static_site():
         v_recs = db.get_recommendations_for_video(v['video_id'])
         data['details'][v['video_id']] = {
             'video': dict(v),
-            'recommendations': [dict(r) for r in v_recs]
+            'recommendations': [normalize_stock_record(dict(r)) for r in v_recs]
         }
         
     # Group recommendations by symbol to precompute performance
     symbol_recs = {}
     for r in recs:
-        symbol_recs.setdefault(r['stock_symbol'], []).append(r)
+        normalized = normalize_stock_record(dict(r))
+        if normalized.get('is_trackable') is False:
+            continue
+        symbol_recs.setdefault(normalized['stock_symbol'], []).append(normalized)
         
     for symbol, s_recs in symbol_recs.items():
         s_recs.sort(key=lambda x: x['id'], reverse=True)
@@ -83,12 +91,14 @@ def generate_static_site():
             with open(watchlist_path, 'r', encoding='utf-8') as f:
                 watchlist_symbols = json.load(f)
             
-            existing_symbols = {r['stock_symbol'] for r in recs}
+            existing_symbols = {r['stock_symbol'] for r in rec_dicts}
             for symbol in watchlist_symbols:
                 if symbol not in existing_symbols:
-                    clean_sym = symbol.strip()
-                    is_tw = any(c.isdigit() for c in clean_sym) or clean_sym.endswith('.TW') or clean_sym.endswith('.TWO')
-                    market = 'TW' if is_tw else 'US'
+                    normalized = normalize_symbol(symbol.strip())
+                    if not normalized['trackable']:
+                        continue
+                    clean_sym = normalized['symbol']
+                    market = normalized['market']
                     logger.info("Pre-fetching custom watchlist stock: %s (%s)", clean_sym, market)
                     try:
                         stock_info = stock_data.get_stock_data(clean_sym, market)
@@ -119,9 +129,6 @@ def generate_static_site():
     # Adjust paths for static deployment
     html = html.replace('href="/static/style.css"', 'href="./static/style.css"')
     html = html.replace('src="/static/app.js"', 'src="./static/app.js"')
-    # Hide update prices button in static mode
-    html = html.replace('id="btnUpdatePrices"', 'id="btnUpdatePrices" style="display:none"')
-    
     with open(os.path.join(docs_dir, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(html)
         

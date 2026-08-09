@@ -8,6 +8,7 @@ import json
 import logging
 import time
 import re
+from modules.symbol_normalizer import normalize_stock_record
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,9 @@ def analyze_content(transcript, api_key):
 - 只提取「明確被討論」的股票，不要猜測
 - 如果主委對某檔股票只是順帶提到但沒有明確觀點，sentiment 設為 neutral
 - 台股代號必須是正確的數字代號（如台積電=2330, 聯發科=2454, 鴻海=2317）
-- 如果無法確認股票代號，stock_symbol 填寫股票名稱
+- 美股必須使用交易 ticker，不要填公司名稱（例如 NVIDIA=NVDA, Google=GOOGL, Cloudflare=NET, Palantir=PLTR, Take-Two=TTWO）
+- 日股請使用 Yahoo Finance 格式（例如 6996.T, 6997.T），不要使用「6996 JP」
+- 若是未上市公司、私有公司、期貨、產業族群或無法確認公開 ticker，請不要放入 stocks，改放在 sectors 或 macro_views
 - 所有文字內容使用繁體中文
 - 最多提取前 10 檔最重要的個股，避免輸出過長，並確保 JSON 格式完整。
 
@@ -229,6 +232,12 @@ def analyze_content(transcript, api_key):
         result['macro_views'] = []
     if 'summary' not in result:
         result['summary'] = []
+
+    result['stocks'] = [
+        normalize_stock_record(stock)
+        for stock in result.get('stocks', [])
+        if stock.get('stock_symbol') or stock.get('stock_name')
+    ]
 
     logger.info("Analysis complete: found %d stocks, %d sectors",
                 len(result['stocks']), len(result['sectors']))
