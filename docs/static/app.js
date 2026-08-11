@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isStatic) {
         // Load data.json once
         fetchStaticData()
-            .then(res => res.json())
             .then(data => {
                 window._staticData = data;
                 // If token exists, try to sync first before loading dashboard
