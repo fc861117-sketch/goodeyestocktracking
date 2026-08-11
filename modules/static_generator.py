@@ -126,9 +126,10 @@ def generate_static_site():
     with open(os.path.join(base_dir, 'templates', 'dashboard.html'), 'r', encoding='utf-8') as f:
         html = f.read()
         
-    # Adjust paths for static deployment
-    html = html.replace('href="/static/style.css"', 'href="./static/style.css"')
-    html = html.replace('src="/static/app.js"', 'src="./static/app.js"')
+    # Adjust paths for static deployment and force browsers to pick up new assets.
+    asset_version = datetime.now().strftime("%Y%m%d%H%M%S")
+    html = html.replace('href="/static/style.css"', f'href="./static/style.css?v={asset_version}"')
+    html = html.replace('src="/static/app.js"', f'src="./static/app.js?v={asset_version}"')
     with open(os.path.join(docs_dir, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(html)
         
